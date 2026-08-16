@@ -69,32 +69,33 @@ npm test
 ## Historical data pipeline
 
 ```text
-Kaggle weekly NFL statistics
+nflverse weekly player statistics
         ↓ trim / normalize
-GSIS/Kaggle player identity
-        ↓ optional Sleeper identity mapping
+GSIS player identity
+        ↓ reuse optional Sleeper identity mapping
 processed historical weekly stats
         ↓ PostgreSQL / Supabase
 internal feature engineering → fantasy value model
 ```
 
-GSIS/Kaggle `player_id` is the canonical historical external identity. Sleeper IDs are optional text provider mappings, never application primary keys. Historical and Sleeper positions are retained separately because a player can legitimately change positions between data providers. Team is not an identity criterion because the Kaggle team is historical and Sleeper’s team is current.
+Sleeper is the league, roster, and current-identity source. nflverse is the single active NFL statistical source. Supabase stores normalized identities and weekly statistics. nflverse's GSIS `player_id` is the canonical historical external identity; internal UUIDs remain relational primary keys, and Sleeper IDs remain optional text mappings. Historical nflverse position and current Sleeper position are retained separately. Team is not an identity criterion because players change teams.
 
-The raw weekly data, rather than Kaggle's precomputed rolling metrics, is retained for future internal feature engineering. The current dataset contains 76,287 weekly rows across the 2012–2025 seasons. Rebuild the generated, ignored import files with:
+The ETL reads only the required columns from `data/nflverse/stats_player_week_2012.csv` through `stats_player_week_2025.csv`. It keeps raw counting stats and nflverse EPA/usage features while deriving safe weekly rates and Half PPR scoring internally. Rebuild the generated, ignored import files with:
 
 ```bash
-python3 scripts/match_sleeper_players.py
 python3 scripts/build_historical_weekly_stats.py
+python3 scripts/compare_historical_providers.py
 ```
 
 Validate the import without credentials or network writes, then run the trusted batch upsert after applying the migrations:
 
 ```bash
-python3 scripts/import_historical_data.py --dry-run
-python3 scripts/import_historical_data.py
+python3 scripts/import_historical_data.py --dry-run --replace-source
+python3 scripts/import_historical_data.py --replace-source
+python3 scripts/import_historical_data.py --verify-only
 ```
 
-The importer validates identity coverage, season range, logical uniqueness, and identifier formatting before any remote write. It upserts players first, reads back the GSIS-to-internal-UUID mapping, then batch-upserts weekly rows. Normal runs never truncate or delete historical data.
+The importer validates all 14 seasons, identity coverage, logical uniqueness, scoring semantics, and identifier formatting before any remote write. Normal imports are idempotent upserts. `--replace-source` is an explicit destructive mode scoped only to `player_weekly_nfl_statistics` rows for 2012–2025; it never deletes players, Sleeper mappings, leagues, rosters, or auth data. This prevents stale Kaggle rows from surviving a provider-key change.
 
 ## Player stats explorer
 
@@ -108,18 +109,19 @@ Authenticated users can open `/players` for database-backed historical leaderboa
 
 Player search queries the local PostgreSQL player table, ranks exact and prefix matches first, and never calls Sleeper while typing. Historical leaderboards use `historical_position`; current identity displays retain `sleeper_position` independently.
 
-Leaderboard categories separate Fantasy, Passing, Rushing, Receiving, and Advanced statistics. Season efficiency is calculated from season totals: completions/attempts, passing yards/attempts, rushing yards/attempts, receiving yards/targets, receiving yards/receptions, and offense snaps/team offense snaps. `true_touches` means rushing attempts plus receptions. QB total offense is passing plus rushing; RB/WR/TE total offense is rushing plus receiving. Regular season and postseason are always separate rows.
+Leaderboard categories separate Fantasy, Passing, Rushing, Receiving, and Advanced statistics. Season efficiency is calculated from season totals: completions/attempts, passing yards/attempts, rushing yards/attempts, receiving yards/targets, and receiving yards/receptions. `true_touches` means rushing attempts plus receptions. QB total offense is passing plus rushing; RB/WR/TE total offense is rushing plus receiving. Regular season and postseason are always separate rows. nflverse does not include snaps, pressure events, or red-zone rushing usage in this weekly file, so those fields remain nullable and render as unavailable rather than fabricated zeroes.
 
-### Historical source limitation
+### Historical provider transition
 
-The imported Kaggle provider contains a small number of demonstrably incorrect touchdown game rows. For example, Derrick Henry's 2024 Week 4 row reports five rushing touchdowns and six total touchdowns; that inflation exists in the source CSV and is reproduced exactly in the database. The normalized view fixes aggregation, weighting, component naming, and season isolation, but does not fabricate corrections where no authoritative replacement field exists. Provider anomalies therefore also affect the source-provided fantasy-point totals. A future source-quality phase should reconcile touchdown events against an authoritative play-by-play source.
+The original Kaggle statistical source was retired after validation found incorrect player-season totals, including Derrick Henry's 2024 rushing production. nflverse correctly produces 325 carries, 1,921 rushing yards, 16 rushing touchdowns, 19 receptions, 193 receiving yards, and two receiving touchdowns for that case. The old files are retained only for the reproducible provider-comparison diagnostic and are not an active fallback.
 
-Migration `20260816030000_player_stats_accuracy.sql` expands the normalized view and adds newly retained provider fields. After applying it, rebuild and re-run the idempotent importer once so rushing first downs and source rate fields are populated:
+Migration `20260816040000_nflverse_player_stats.sql` adds provider-neutral nflverse fields and makes the explorer views read only `provider = 'nflverse'`. Apply migrations, rebuild, validate, and explicitly replace the old weekly source with:
 
 ```bash
+npx supabase db push
 python3 scripts/build_historical_weekly_stats.py
-python3 scripts/import_historical_data.py --dry-run
-python3 scripts/import_historical_data.py
+python3 scripts/import_historical_data.py --dry-run --replace-source
+python3 scripts/import_historical_data.py --replace-source
 ```
 
 Manual mapping corrections are stored in [`data/player_mapping_overrides.csv`](data/player_mapping_overrides.csv). Its `action` is either `match` (with a Sleeper ID) or `unmatched`; generated mapping CSVs should never be manually edited.

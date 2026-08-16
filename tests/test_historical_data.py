@@ -33,15 +33,58 @@ class PlayerMappingTests(unittest.TestCase):
 
 
 class WeeklyEtlValidationTests(unittest.TestCase):
+    @staticmethod
+    def source_row(**changes):
+        row = {column: 0 for column in etl.SOURCE_COLUMNS}
+        row.update({"player_id": "00-1", "player_display_name": "Player One", "position": "RB", "position_group": "RB", "season": 2024, "week": 1, "season_type": "REG", "team": "A", "opponent_team": "B", "fantasy_points": 10.0, "fantasy_points_ppr": 12.0, "receptions": 2})
+        row.update(changes)
+        return row
+
+    def test_all_expected_nflverse_files_have_the_canonical_source_schema(self):
+        paths = etl.source_files()
+        self.assertEqual([int(path.stem[-4:]) for path in paths], list(range(2012, 2026)))
+        for path in paths:
+            header = pd.read_csv(path, nrows=0)
+            etl.validate_required_columns(header, etl.SOURCE_COLUMNS, str(path))
+
     def test_required_column_validation(self):
         with self.assertRaisesRegex(ValueError, "missing required columns"):
             etl.validate_required_columns(pd.DataFrame({"player_id": []}), etl.WEEKLY_COLUMNS, "weekly stats")
 
     def test_weekly_uniqueness_validation(self):
-        row = {column: 0 for column in etl.WEEKLY_COLUMNS}
-        row.update({"player_id": "00-1", "season": 2024, "week": 1, "season_type": "REG", "game_id": "game", "team": "NE"})
+        row = etl.normalize_weekly(pd.DataFrame([self.source_row()])).iloc[0].to_dict()
         with self.assertRaisesRegex(ValueError, "duplicate weekly records"):
             etl.validate_weekly_stats(pd.DataFrame([row, row.copy()]))
+
+    def test_nflverse_normalization_preserves_gsis_scoring_and_source(self):
+        row = self.source_row(carries=10, rushing_yards=55, rushing_tds=1, receptions=4, targets=5, receiving_yards=30, receiving_tds=1, fantasy_points=14.5, fantasy_points_ppr=18.5)
+        result = etl.normalize_weekly(pd.DataFrame([row])).iloc[0]
+        self.assertEqual(result["player_id"], "00-1")
+        self.assertEqual(result["source"], "nflverse")
+        self.assertEqual(result["fantasy_points_half_ppr"], 16.5)
+        self.assertEqual(result["yards_per_carry"], 5.5)
+        self.assertEqual(result["true_touches"], 14)
+        self.assertEqual(result["total_touchdowns"], 2)
+
+    def test_safe_division_and_team_specific_logical_identity(self):
+        source = pd.DataFrame([self.source_row(attempts=0), self.source_row(team="C", opponent_team="D", attempts=10, passing_yards=75)])
+        result = etl.normalize_weekly(source)
+        self.assertTrue(pd.isna(result.iloc[0]["yards_per_attempt"]))
+        self.assertEqual(result.iloc[1]["yards_per_attempt"], 7.5)
+        self.assertNotEqual(result.iloc[0]["game_id"], result.iloc[1]["game_id"])
+
+    def test_reg_and_post_rows_remain_independent(self):
+        source = pd.DataFrame([self.source_row(season_type="REG"), self.source_row(season_type="POST", week=20)])
+        result = etl.normalize_weekly(source)
+        self.assertEqual(set(result["season_type"]), {"REG", "POST"})
+        self.assertEqual(etl.validate_weekly_stats(result), 0)
+
+    def test_derrick_henry_2024_reg_nflverse_totals(self):
+        columns = ["player_id", "season_type", "carries", "rushing_yards", "rushing_tds", "receptions", "receiving_yards", "receiving_tds"]
+        frame = pd.read_csv("data/nflverse/stats_player_week_2024.csv", usecols=columns, dtype={"player_id": "string"})
+        henry = frame[(frame["player_id"] == "00-0032764") & (frame["season_type"] == "REG")]
+        totals = henry[["carries", "rushing_yards", "rushing_tds", "receptions", "receiving_yards", "receiving_tds"]].sum()
+        self.assertEqual(tuple(totals), (325, 1921, 16, 19, 193, 2))
 
 
 class HistoricalImporterTests(unittest.TestCase):
@@ -53,13 +96,32 @@ class HistoricalImporterTests(unittest.TestCase):
         self.assertEqual(payloads[0]["sleeper_player_id"], "7564")
         self.assertEqual((payloads[0]["height"], payloads[0]["weight"]), (72, 200))
 
-    def test_weekly_payload_uses_internal_uuid_and_preserves_scoring(self):
-        weekly = pd.DataFrame([{"player_id": "00-1", "sleeper_player_id": "7564", "season": 2024, "week": 1, "season_type": "REG", "game_id": "2024_01_A_B", "team": "A", "complete_pass": 20, "pass_touchdown": 2, "rush_touchdown": 1, "receiving_touchdown": 3, "fantasy_points_standard": 10.0, "fantasy_points_half_ppr": 12.0, "fantasy_points_ppr": 14.0}])
+    def test_weekly_payload_uses_internal_uuid_and_nflverse_metadata(self):
+        weekly = pd.DataFrame([{"player_id": "00-1", "sleeper_player_id": "7564", "season": 2024, "week": 1, "season_type": "REG", "game_id": "nflverse:2024:REG:01:A:B", "team": "A", "opponent_team": "B", "historical_position": "QB", "source": "nflverse", "source_dataset": "player_stats", "source_season": 2024, "completions": 20, "passing_touchdowns": 2, "interceptions_thrown": 1, "rushing_touchdowns": 1, "receiving_touchdowns": 0, "fantasy_points_standard": 10.0, "fantasy_points_half_ppr": 12.0, "fantasy_points_ppr": 14.0}])
         payload = importer.prepare_weekly_payloads(weekly, {"00-1": "internal-uuid"})[0]
         self.assertEqual(payload["player_id"], "internal-uuid")
         self.assertEqual(payload["completions"], 20)
         self.assertEqual(payload["fantasy_points_ppr"], 14.0)
-        self.assertEqual((payload["passing_touchdowns"], payload["rushing_touchdowns"], payload["receiving_touchdowns"]), (2, 1, 3))
+        self.assertEqual(payload["provider"], "nflverse")
+        self.assertEqual(payload["source_dataset"], "player_stats")
+        self.assertEqual((payload["passing_touchdowns"], payload["rushing_touchdowns"], payload["receiving_touchdowns"]), (2, 1, 0))
+
+    def test_replacement_delete_is_scoped_to_weekly_stats_and_expected_seasons(self):
+        client = object.__new__(importer.SupabaseRest)
+        calls = []
+        client.request = lambda method, path, body=None, extra_headers=None: calls.append((method, path, body, extra_headers))
+        client.delete_historical_weekly_stats(2012, 2025)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "DELETE")
+        self.assertTrue(calls[0][1].startswith("/player_weekly_nfl_statistics?"))
+        self.assertIn("season=gte.2012", calls[0][1])
+        self.assertIn("season=lte.2025", calls[0][1])
+
+    def test_normal_payload_generation_is_deterministic(self):
+        weekly = pd.DataFrame([{"player_id": "00-1", "season": 2024, "week": 1, "season_type": "REG", "game_id": "nflverse:2024:REG:01:A:B", "team": "A", "opponent_team": "B", "historical_position": "RB", "source": "nflverse", "source_dataset": "player_stats", "source_season": 2024, "fantasy_points_standard": 10.0, "fantasy_points_half_ppr": 11.0, "fantasy_points_ppr": 12.0}])
+        first = importer.prepare_weekly_payloads(weekly, {"00-1": "internal-uuid"})
+        second = importer.prepare_weekly_payloads(weekly, {"00-1": "internal-uuid"})
+        self.assertEqual(first, second)
 
 
 if __name__ == "__main__":

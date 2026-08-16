@@ -1,7 +1,9 @@
-"""Idempotently import processed historical data through Supabase PostgREST.
+"""Import canonical nflverse historical data through Supabase PostgREST.
 
-Dry-run validates local data and performs no network calls. Live mode requires a
-service-role key and upserts in batches; it never truncates or bulk-deletes data.
+Normal imports are idempotent upserts. Provider replacement is deliberately
+separate: ``--replace-source`` validates every local row before deleting only
+weekly NFL statistics from 2012–2025, then loads the nflverse dataset. No player,
+Sleeper, league, roster, or authentication records are deleted.
 """
 from __future__ import annotations
 
@@ -26,21 +28,14 @@ FANTASY_POSITIONS = {"QB", "RB", "WR", "TE"}
 EXPECTED_SEASONS = set(range(2012, 2026))
 LOGICAL_WEEKLY_KEY = ["player_id", "season", "week", "season_type", "game_id"]
 PLAYER_REQUIRED = {"player_id", "player_name", "historical_position", "sleeper_player_id"}
-WEEKLY_REQUIRED = set(LOGICAL_WEEKLY_KEY + ["team", "fantasy_points_standard", "fantasy_points_half_ppr", "fantasy_points_ppr"])
+WEEKLY_REQUIRED = set(LOGICAL_WEEKLY_KEY + ["team", "historical_position", "source", "source_dataset", "source_season", "fantasy_points_standard", "fantasy_points_half_ppr", "fantasy_points_ppr"])
 WEEKLY_RENAMES = {
-    "complete_pass": "completions", "comp_pct": "completion_percentage", "ypa": "yards_per_attempt",
-    "pass_touchdown": "passing_touchdowns", "interception": "interceptions", "first_down_pass": "first_down_passes",
-    "pass_td_pct": "source_passing_td_percentage", "int_pct": "source_interception_percentage",
-    "times_pressured_pct": "pressure_percentage", "yptarget": "yards_per_target", "ypr": "yards_per_reception",
-    "rec_adot": "receiving_adot", "receiving_touchdown": "receiving_touchdowns",
-    "rec_td_pct": "source_receiving_td_percentage",
-    "rush_attempts_gtg": "rush_attempts_goal_to_go", "ypc": "yards_per_carry",
-    "rush_touchdown": "rushing_touchdowns", "rush_touchdown_red_zone": "rushing_touchdowns_red_zone",
-    "rush_touchdown_gtg": "rushing_touchdowns_goal_to_go", "offense_pct": "offense_snap_percentage",
-    "rush_td_pct": "source_rushing_td_percentage", "first_down_rush": "rushing_first_downs",
-    "total_tds": "total_touchdowns",
+    "passing_first_downs": "first_down_passes",
 }
-CONTEXT_COLUMNS = {"player_id", "sleeper_player_id", "season", "week", "season_type", "game_id", "team"}
+CONTEXT_COLUMNS = {
+    "player_id", "sleeper_player_id", "season", "week", "season_type", "game_id", "team",
+    "opponent_team", "historical_position", "source", "source_dataset", "source_season",
+}
 
 
 def load_local_environment() -> None:
@@ -140,6 +135,29 @@ class SupabaseRest:
         query = urllib.parse.urlencode({"on_conflict": conflict})
         self.request("POST", f"/{table}?{query}", rows, {"Prefer": "resolution=merge-duplicates,return=minimal"})
 
+    def delete_historical_weekly_stats(self, first_season: int, last_season: int) -> None:
+        query = urllib.parse.urlencode([("season", f"gte.{first_season}"), ("season", f"lte.{last_season}")])
+        self.request("DELETE", f"/player_weekly_nfl_statistics?{query}", extra_headers={"Prefer": "return=minimal"})
+
+    def count_historical_weekly_stats(self, first_season: int, last_season: int, provider: str | None = None) -> int:
+        filters = [("select", "id"), ("season", f"gte.{first_season}"), ("season", f"lte.{last_season}")]
+        if provider:
+            filters.append(("provider", f"eq.{provider}"))
+        request = urllib.request.Request(
+            self.base_url + "/player_weekly_nfl_statistics?" + urllib.parse.urlencode(filters),
+            headers={**self.headers, "Accept": "application/json", "Prefer": "count=exact", "Range": "0-0"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                content_range = response.headers.get("Content-Range", "")
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode(errors="replace")
+            raise RuntimeError(f"Supabase count failed ({error.code}): {detail}") from error
+        if "/" not in content_range or content_range.endswith("/*"):
+            raise RuntimeError(f"Supabase did not return an exact row count: {content_range!r}")
+        return int(content_range.rsplit("/", 1)[1])
+
 
 def plan_player_upserts(identities: pd.DataFrame, existing: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
     by_gsis = {row["gsis_id"]: row for row in existing if row.get("gsis_id")}
@@ -182,10 +200,16 @@ def prepare_weekly_payloads(weekly: pd.DataFrame, player_ids: dict[str, str]) ->
         if gsis_id not in player_ids:
             raise ValueError(f"No internal UUID was found for GSIS player {gsis_id}.")
         numeric_stats = {WEEKLY_RENAMES.get(key, key): clean(value) for key, value in source.items() if key not in CONTEXT_COLUMNS}
+        provider = str(source["source"])
+        if provider != "nflverse":
+            raise ValueError(f"Expected nflverse source metadata, found {provider!r}.")
         payloads.append({
             "player_id": player_ids[gsis_id], "season": int(source["season"]), "week": int(source["week"]),
             "season_type": str(source["season_type"]), "game_id": str(source["game_id"]),
-            "team": clean(source.get("team")), "provider": "kaggle", "stats": numeric_stats,
+            "team": clean(source.get("team")), "opponent_team": clean(source.get("opponent_team")),
+            "historical_position": clean(source.get("historical_position")), "provider": provider,
+            "source_dataset": clean(source.get("source_dataset")), "source_season": int(source["source_season"]),
+            "stats": {**numeric_stats, "source_dataset": clean(source.get("source_dataset")), "source_season": int(source["source_season"])},
             **numeric_stats,
         })
     return payloads
@@ -194,6 +218,8 @@ def prepare_weekly_payloads(weekly: pd.DataFrame, player_ids: dict[str, str]) ->
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="Validate and summarize without network access or writes.")
+    parser.add_argument("--replace-source", action="store_true", help="Delete only 2012–2025 weekly NFL stat rows before importing nflverse.")
+    parser.add_argument("--verify-only", action="store_true", help="Compare remote nflverse row counts with the validated local output without writing.")
     parser.add_argument("--batch-size", type=int, default=500)
     args = parser.parse_args()
     if not 1 <= args.batch_size <= 2000:
@@ -203,7 +229,10 @@ def main() -> int:
     seasons = sorted(weekly["season"].astype(int).unique())
     print(f"Validated {len(identities):,} player identities and {len(weekly):,} weekly rows.")
     print(f"Seasons: {seasons[0]}–{seasons[-1]}; logical duplicates: 0")
+    print("Provider: nflverse/player_stats")
     if args.dry_run:
+        if args.replace_source:
+            print("Replacement plan: delete player_weekly_nfl_statistics rows for 2012–2025 only, then import validated nflverse rows.")
         print("Dry run complete. No network requests or database writes were made.")
         return 0
     load_local_environment()
@@ -212,6 +241,14 @@ def main() -> int:
     if not url or not service_key:
         raise RuntimeError("Live import requires NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY.")
     client = SupabaseRest(url, service_key)
+    if args.verify_only:
+        remote_nflverse = client.count_historical_weekly_stats(min(EXPECTED_SEASONS), max(EXPECTED_SEASONS), "nflverse")
+        remote_all = client.count_historical_weekly_stats(min(EXPECTED_SEASONS), max(EXPECTED_SEASONS))
+        print(f"Remote nflverse rows: {remote_nflverse:,}; all-provider rows: {remote_all:,}; local expected: {len(weekly):,}")
+        if remote_nflverse != len(weekly) or remote_all != len(weekly):
+            raise RuntimeError("Remote historical row counts do not match the nflverse-only local dataset.")
+        print("Remote provider replacement is complete and row counts match.")
+        return 0
     existing = client.fetch_all_players()
     player_payloads, inserted, updated = plan_player_upserts(identities, existing)
     total_player_batches = (len(player_payloads) + args.batch_size - 1) // args.batch_size
@@ -225,14 +262,22 @@ def main() -> int:
     if missing:
         raise RuntimeError(f"Player read-back validation failed for {len(missing)} GSIS IDs.")
     weekly_payloads = prepare_weekly_payloads(weekly, gsis_to_uuid)
+    if args.replace_source:
+        print("Deleting existing weekly NFL statistics for seasons 2012–2025...")
+        client.delete_historical_weekly_stats(min(EXPECTED_SEASONS), max(EXPECTED_SEASONS))
+        print("Scoped weekly-stat deletion complete; unrelated tables were not touched.")
     total_weekly_batches = (len(weekly_payloads) + args.batch_size - 1) // args.batch_size
     for number, batch in batched(weekly_payloads, args.batch_size):
         client.upsert("player_weekly_nfl_statistics", batch, "player_id,season,week,season_type,game_id,provider")
         print(f"Weekly batch {number}/{total_weekly_batches} upserted ({len(batch):,} rows)")
+    remote_count = client.count_historical_weekly_stats(min(EXPECTED_SEASONS), max(EXPECTED_SEASONS), "nflverse")
+    if remote_count != len(weekly_payloads):
+        raise RuntimeError(f"Post-import verification found {remote_count:,} nflverse rows; expected {len(weekly_payloads):,}.")
     print("\n========== IMPORT COMPLETE ==========")
     print(f"Players inserted:          {inserted:,}")
     print(f"Players updated:           {updated:,}")
     print(f"Weekly rows upserted:      {len(weekly_payloads):,}")
+    print(f"Verified remote rows:      {remote_count:,}")
     print("Weekly rows skipped:       0")
     print("Failures:                  0")
     print(f"Elapsed:                   {time.monotonic() - started:.1f}s")
