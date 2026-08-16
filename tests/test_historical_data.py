@@ -3,6 +3,7 @@ import unittest
 import pandas as pd
 
 from scripts import build_historical_weekly_stats as etl
+from scripts import import_historical_data as importer
 from scripts import match_sleeper_players as matcher
 
 
@@ -41,6 +42,23 @@ class WeeklyEtlValidationTests(unittest.TestCase):
         row.update({"player_id": "00-1", "season": 2024, "week": 1, "season_type": "REG", "game_id": "game", "team": "NE"})
         with self.assertRaisesRegex(ValueError, "duplicate weekly records"):
             etl.validate_weekly_stats(pd.DataFrame([row, row.copy()]))
+
+
+class HistoricalImporterTests(unittest.TestCase):
+    def test_player_upsert_reuses_existing_sleeper_identity(self):
+        identities = pd.DataFrame([{"player_id": "00-1", "player_name": "Player One", "historical_position": "WR", "sleeper_player_id": "7564", "sleeper_position": "WR", "sleeper_fantasy_positions": "WR", "historical_team": "OLD", "height": "72.0", "weight": "200.0"}])
+        existing = [{"id": "existing-uuid", "gsis_id": None, "sleeper_player_id": "7564"}]
+        payloads, inserted, updated = importer.plan_player_upserts(identities, existing)
+        self.assertEqual((payloads[0]["id"], inserted, updated), ("existing-uuid", 0, 1))
+        self.assertEqual(payloads[0]["sleeper_player_id"], "7564")
+        self.assertEqual((payloads[0]["height"], payloads[0]["weight"]), (72, 200))
+
+    def test_weekly_payload_uses_internal_uuid_and_preserves_scoring(self):
+        weekly = pd.DataFrame([{"player_id": "00-1", "sleeper_player_id": "7564", "season": 2024, "week": 1, "season_type": "REG", "game_id": "2024_01_A_B", "team": "A", "complete_pass": 20, "fantasy_points_standard": 10.0, "fantasy_points_half_ppr": 12.0, "fantasy_points_ppr": 14.0}])
+        payload = importer.prepare_weekly_payloads(weekly, {"00-1": "internal-uuid"})[0]
+        self.assertEqual(payload["player_id"], "internal-uuid")
+        self.assertEqual(payload["completions"], 20)
+        self.assertEqual(payload["fantasy_points_ppr"], 14.0)
 
 
 if __name__ == "__main__":

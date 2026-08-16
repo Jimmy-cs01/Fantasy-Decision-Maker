@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "data:build": "python3 scripts/match_sleeper_players.py && python3 scripts/build_historical_weekly_stats.py",
+    "data:import:dry-run": "python3 scripts/import_historical_data.py --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

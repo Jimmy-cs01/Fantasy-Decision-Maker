@@ -1,0 +1,1 @@
+export default function PlayerLoading() { return <div className="mx-auto max-w-6xl animate-pulse"><div className="h-10 w-72 rounded bg-slate-800" /><div className="mt-6 grid gap-4 sm:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-28 rounded-xl bg-slate-900" />)}</div><div className="mt-6 h-96 rounded-xl bg-slate-900" /></div>; }

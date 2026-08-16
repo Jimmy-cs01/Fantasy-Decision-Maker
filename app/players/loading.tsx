@@ -1,0 +1,1 @@
+export default function PlayersLoading() { return <div className="mx-auto max-w-7xl animate-pulse"><div className="h-9 w-52 rounded bg-slate-800" /><div className="mt-6 h-12 rounded-xl bg-slate-800" /><div className="mt-6 h-96 rounded-xl bg-slate-900" /></div>; }
