@@ -54,11 +54,12 @@ class HistoricalImporterTests(unittest.TestCase):
         self.assertEqual((payloads[0]["height"], payloads[0]["weight"]), (72, 200))
 
     def test_weekly_payload_uses_internal_uuid_and_preserves_scoring(self):
-        weekly = pd.DataFrame([{"player_id": "00-1", "sleeper_player_id": "7564", "season": 2024, "week": 1, "season_type": "REG", "game_id": "2024_01_A_B", "team": "A", "complete_pass": 20, "fantasy_points_standard": 10.0, "fantasy_points_half_ppr": 12.0, "fantasy_points_ppr": 14.0}])
+        weekly = pd.DataFrame([{"player_id": "00-1", "sleeper_player_id": "7564", "season": 2024, "week": 1, "season_type": "REG", "game_id": "2024_01_A_B", "team": "A", "complete_pass": 20, "pass_touchdown": 2, "rush_touchdown": 1, "receiving_touchdown": 3, "fantasy_points_standard": 10.0, "fantasy_points_half_ppr": 12.0, "fantasy_points_ppr": 14.0}])
         payload = importer.prepare_weekly_payloads(weekly, {"00-1": "internal-uuid"})[0]
         self.assertEqual(payload["player_id"], "internal-uuid")
         self.assertEqual(payload["completions"], 20)
         self.assertEqual(payload["fantasy_points_ppr"], 14.0)
+        self.assertEqual((payload["passing_touchdowns"], payload["rushing_touchdowns"], payload["receiving_touchdowns"]), (2, 1, 3))
 
 
 if __name__ == "__main__":

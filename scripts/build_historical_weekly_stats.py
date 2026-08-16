@@ -17,9 +17,9 @@ WEEKLY_OUTPUT = PROCESSED_DIR / "historical_weekly_player_stats.csv"
 IDENTITY_COLUMNS = ["player_id", "pfr_player_id", "player_name", "historical_position", "position_group", "historical_team", "birth_date", "height", "weight", "college_name", "rookie_season", "sleeper_player_id", "sleeper_name", "sleeper_position", "sleeper_fantasy_positions", "sleeper_current_team", "match_score", "match_method", "confidence"]
 WEEKLY_COLUMNS = [
     "player_id", "season", "week", "season_type", "game_id", "team",
-    "pass_attempts", "complete_pass", "passing_yards", "passing_air_yards", "comp_pct", "ypa", "pass_adot", "passer_rating", "pass_touchdown", "interception", "first_down_pass", "times_sacked", "times_pressured", "times_pressured_pct",
-    "targets", "receptions", "receiving_yards", "receiving_air_yards", "yards_after_catch", "yptarget", "ypr", "rec_adot", "receiving_touchdown",
-    "rush_attempts", "rush_attempts_red_zone", "rush_attempts_gtg", "rushing_yards", "ypc", "rush_touchdown", "rush_touchdown_red_zone", "rush_touchdown_gtg",
+    "pass_attempts", "complete_pass", "passing_yards", "passing_air_yards", "comp_pct", "ypa", "pass_adot", "passer_rating", "pass_touchdown", "pass_td_pct", "interception", "int_pct", "first_down_pass", "times_sacked", "times_pressured", "times_pressured_pct",
+    "targets", "receptions", "receiving_yards", "receiving_air_yards", "yards_after_catch", "yptarget", "ypr", "rec_adot", "receiving_touchdown", "rec_td_pct",
+    "rush_attempts", "rush_attempts_red_zone", "rush_attempts_gtg", "rushing_yards", "ypc", "rush_touchdown", "rush_touchdown_red_zone", "rush_touchdown_gtg", "rush_td_pct", "first_down_rush",
     "offense_snaps", "team_offense_snaps", "offense_pct", "touches", "total_yards", "total_tds",
     "fantasy_points_standard", "fantasy_points_half_ppr", "fantasy_points_ppr",
 ]

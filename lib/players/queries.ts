@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { scoringSortColumn } from "./filters";
+import { FANTASY_POSITIONS, scoringSortColumn } from "./filters";
 import type { LeaderSort, PlayerSeasonRow, PositionFilter, ScoringFormat, SeasonType } from "./types";
 
 export async function getAvailableSeasons(seasonType: SeasonType = "REG") {
@@ -14,8 +14,9 @@ export async function getPlayerLeaders(options: { season: number; seasonType: Se
   const db = await createClient(); const pageSize = 50; const start = (options.page - 1) * pageSize;
   const sortColumn = scoringSortColumn(options.sort, options.scoring);
   let query = db.from("player_season_stats").select("*", { count: "exact" }).eq("season", options.season).eq("season_type", options.seasonType);
-  if (options.position === "FLEX") query = query.in("historical_position", ["RB", "WR", "TE"]);
-  else if (options.position !== "ALL") query = query.eq("historical_position", options.position);
+  if (options.position === "ALL") query = query.in("historical_position", [...FANTASY_POSITIONS]);
+  else if (options.position === "FLEX") query = query.in("historical_position", ["RB", "WR", "TE"]);
+  else query = query.eq("historical_position", options.position);
   query = options.view === "all" ? query.order("full_name", { ascending: true }) : query.order(sortColumn as string, { ascending: false }).order("full_name", { ascending: true });
   const { data, count, error } = await query.range(start, start + pageSize - 1);
   if (error) throw new Error(`Unable to load player leaders: ${error.message}`);
@@ -34,7 +35,7 @@ export async function getPlayerDetail(playerId: string, requestedSeason?: number
   if (!season) return { player, seasons, season: null, summary: null, weeks: [] };
   const [{ data: summary, error: summaryError }, { data: weeks, error: weeksError }] = await Promise.all([
     db.from("player_season_stats").select("*").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).maybeSingle(),
-    db.from("player_weekly_nfl_statistics").select("week,game_id,team,targets,receptions,receiving_yards,rush_attempts,rushing_yards,passing_yards,total_touchdowns,offense_snaps,fantasy_points_standard,fantasy_points_half_ppr,fantasy_points_ppr").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).order("week", { ascending: true }),
+    db.from("player_weekly_nfl_statistics").select("week,game_id,team,pass_attempts,completions,completion_percentage,passing_yards,yards_per_attempt,passing_touchdowns,interceptions,rush_attempts,rushing_yards,yards_per_carry,rushing_touchdowns,rush_attempts_red_zone,rush_attempts_goal_to_go,targets,receptions,receiving_yards,yards_per_target,yards_per_reception,receiving_touchdowns,receiving_air_yards,yards_after_catch,receiving_adot,offense_snaps,team_offense_snaps,offense_snap_percentage,fantasy_points_standard,fantasy_points_half_ppr,fantasy_points_ppr").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).order("week", { ascending: true }),
   ]);
   if (summaryError) throw new Error(`Unable to load season summary: ${summaryError.message}`);
   if (weeksError) throw new Error(`Unable to load weekly stats: ${weeksError.message}`);

@@ -108,6 +108,20 @@ Authenticated users can open `/players` for database-backed historical leaderboa
 
 Player search queries the local PostgreSQL player table, ranks exact and prefix matches first, and never calls Sleeper while typing. Historical leaderboards use `historical_position`; current identity displays retain `sleeper_position` independently.
 
+Leaderboard categories separate Fantasy, Passing, Rushing, Receiving, and Advanced statistics. Season efficiency is calculated from season totals: completions/attempts, passing yards/attempts, rushing yards/attempts, receiving yards/targets, receiving yards/receptions, and offense snaps/team offense snaps. `true_touches` means rushing attempts plus receptions. QB total offense is passing plus rushing; RB/WR/TE total offense is rushing plus receiving. Regular season and postseason are always separate rows.
+
+### Historical source limitation
+
+The imported Kaggle provider contains a small number of demonstrably incorrect touchdown game rows. For example, Derrick Henry's 2024 Week 4 row reports five rushing touchdowns and six total touchdowns; that inflation exists in the source CSV and is reproduced exactly in the database. The normalized view fixes aggregation, weighting, component naming, and season isolation, but does not fabricate corrections where no authoritative replacement field exists. Provider anomalies therefore also affect the source-provided fantasy-point totals. A future source-quality phase should reconcile touchdown events against an authoritative play-by-play source.
+
+Migration `20260816030000_player_stats_accuracy.sql` expands the normalized view and adds newly retained provider fields. After applying it, rebuild and re-run the idempotent importer once so rushing first downs and source rate fields are populated:
+
+```bash
+python3 scripts/build_historical_weekly_stats.py
+python3 scripts/import_historical_data.py --dry-run
+python3 scripts/import_historical_data.py
+```
+
 Manual mapping corrections are stored in [`data/player_mapping_overrides.csv`](data/player_mapping_overrides.csv). Its `action` is either `match` (with a Sleeper ID) or `unmatched`; generated mapping CSVs should never be manually edited.
 
 ## Future roadmap

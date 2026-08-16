@@ -1,35 +1,44 @@
-import type { LeaderSort, PlayerSeasonRow, PositionFilter, ScoringFormat } from "./types";
+import type { LeaderSort, PlayerExplorerFilters, PlayerSeasonRow, PositionFilter, ScoringFormat, StatCategory } from "./types";
 
-export const SCORING_COLUMNS: Record<ScoringFormat, { points: keyof PlayerSeasonRow; ppg: keyof PlayerSeasonRow; label: string }> = {
-  standard: { points: "fantasy_points_standard", ppg: "fantasy_points_standard_per_game", label: "Standard" },
-  half_ppr: { points: "fantasy_points_half_ppr", ppg: "fantasy_points_half_ppr_per_game", label: "Half PPR" },
-  ppr: { points: "fantasy_points_ppr", ppg: "fantasy_points_ppr_per_game", label: "PPR" },
+export const FANTASY_POSITIONS = ["QB", "RB", "WR", "TE"] as const;
+export const POSITIONS: PositionFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX"];
+export const CATEGORIES: StatCategory[] = ["fantasy", "passing", "rushing", "receiving", "advanced"];
+export const SCORING_COLUMNS: Record<ScoringFormat, { points: keyof PlayerSeasonRow; ppg: keyof PlayerSeasonRow; label: string }> = { standard: { points: "fantasy_points_standard", ppg: "fantasy_points_standard_per_game", label: "Standard" }, half_ppr: { points: "fantasy_points_half_ppr", ppg: "fantasy_points_half_ppr_per_game", label: "Half PPR" }, ppr: { points: "fantasy_points_ppr", ppg: "fantasy_points_ppr_per_game", label: "PPR" } };
+
+export const SORT_COLUMNS: Record<Exclude<LeaderSort, "fantasy_points" | "fantasy_ppg">, keyof PlayerSeasonRow> = {
+  total_yards: "total_yards", total_touchdowns: "total_touchdowns", snap_share: "snap_share", true_touches: "true_touches",
+  pass_attempts: "pass_attempts", completions: "completions", completion_percentage: "completion_percentage", passing_yards: "passing_yards", passing_air_yards: "passing_air_yards", passing_touchdowns: "passing_touchdowns", interceptions_thrown: "interceptions_thrown", yards_per_pass_attempt: "yards_per_pass_attempt", pass_adot: "pass_adot", passer_rating: "passer_rating", passing_td_percentage: "passing_td_percentage", interception_percentage: "interception_percentage", pressure_percentage: "pressure_percentage",
+  rush_attempts: "rush_attempts", rushing_yards: "rushing_yards", rushing_touchdowns: "rushing_touchdowns", yards_per_carry: "yards_per_carry", rushing_td_percentage: "rushing_td_percentage", rush_attempts_red_zone: "rush_attempts_red_zone", rush_attempts_goal_to_go: "rush_attempts_goal_to_go", red_zone_rush_share: "red_zone_rush_share", goal_to_go_rush_share: "goal_to_go_rush_share",
+  targets: "targets", receptions: "receptions", receiving_yards: "receiving_yards", receiving_touchdowns: "receiving_touchdowns", receiving_air_yards: "receiving_air_yards", yards_after_catch: "yards_after_catch", yards_per_target: "yards_per_target", yards_per_reception: "yards_per_reception", receiving_adot: "receiving_adot", yards_after_catch_per_reception: "yards_after_catch_per_reception", receiving_td_percentage: "receiving_td_percentage",
 };
+export const CATEGORY_DEFAULT_SORT: Record<StatCategory, LeaderSort> = { fantasy: "fantasy_points", passing: "passing_yards", rushing: "rushing_yards", receiving: "receiving_yards", advanced: "snap_share" };
 
-export const SORT_COLUMNS: Record<LeaderSort, keyof PlayerSeasonRow> = {
-  points: "fantasy_points_ppr", ppg: "fantasy_points_ppr_per_game", yards: "total_yards", tds: "total_touchdowns",
-  targets: "targets", touches: "touches", receptions: "receptions", receiving_yards: "receiving_yards",
-  rushing_yards: "rushing_yards", passing_yards: "passing_yards",
-};
-
-export function scoringSortColumn(sort: LeaderSort, scoring: ScoringFormat): keyof PlayerSeasonRow {
-  if (sort === "points") return SCORING_COLUMNS[scoring].points;
-  if (sort === "ppg") return SCORING_COLUMNS[scoring].ppg;
-  return SORT_COLUMNS[sort];
+export interface StatColumn { label: string; key: keyof PlayerSeasonRow; sort: LeaderSort; digits?: number; percentage?: boolean; }
+export function categoryColumns(category: StatCategory, scoring: ScoringFormat, position: PositionFilter = "ALL"): StatColumn[] {
+  const fantasy = SCORING_COLUMNS[scoring];
+  if (category === "fantasy") return [{ label: "GP", key: "games_played", sort: "fantasy_points" }, { label: "PPG", key: fantasy.ppg, sort: "fantasy_ppg", digits: 1 }, { label: "Points", key: fantasy.points, sort: "fantasy_points", digits: 1 }, { label: "Total Yds", key: "total_yards", sort: "total_yards" }, { label: "Total TD", key: "total_touchdowns", sort: "total_touchdowns" }, { label: "Snap", key: "snap_share", sort: "snap_share", digits: 1, percentage: true }];
+  if (category === "passing") return [{ label: "GP", key: "games_played", sort: "passing_yards" }, { label: "Att", key: "pass_attempts", sort: "pass_attempts" }, { label: "Comp", key: "completions", sort: "completions" }, { label: "Comp %", key: "completion_percentage", sort: "completion_percentage", digits: 1, percentage: true }, { label: "Pass Yds", key: "passing_yards", sort: "passing_yards" }, { label: "Air Yds", key: "passing_air_yards", sort: "passing_air_yards" }, { label: "Y/A", key: "yards_per_pass_attempt", sort: "yards_per_pass_attempt", digits: 1 }, { label: "Pass TD", key: "passing_touchdowns", sort: "passing_touchdowns" }, { label: "INT", key: "interceptions_thrown", sort: "interceptions_thrown" }, { label: "Rating", key: "passer_rating", sort: "passer_rating", digits: 1 }, { label: "Pressure", key: "pressure_percentage", sort: "pressure_percentage", digits: 1, percentage: true }];
+  if (category === "rushing") return [{ label: "GP", key: "games_played", sort: "rushing_yards" }, { label: "Rush Att", key: "rush_attempts", sort: "rush_attempts" }, { label: "Rush Yds", key: "rushing_yards", sort: "rushing_yards" }, { label: "Y/C", key: "yards_per_carry", sort: "yards_per_carry", digits: 1 }, { label: "Rush TD", key: "rushing_touchdowns", sort: "rushing_touchdowns" }, { label: "RZ Att", key: "rush_attempts_red_zone", sort: "rush_attempts_red_zone" }, { label: "GTG Att", key: "rush_attempts_goal_to_go", sort: "rush_attempts_goal_to_go" }, { label: "Snap", key: "snap_share", sort: "snap_share", digits: 1, percentage: true }];
+  if (category === "receiving") return [{ label: "GP", key: "games_played", sort: "receiving_yards" }, { label: "Targets", key: "targets", sort: "targets" }, { label: "Rec", key: "receptions", sort: "receptions" }, { label: "Rec Yds", key: "receiving_yards", sort: "receiving_yards" }, { label: "Y/Tgt", key: "yards_per_target", sort: "yards_per_target", digits: 1 }, { label: "Y/Rec", key: "yards_per_reception", sort: "yards_per_reception", digits: 1 }, { label: "Rec TD", key: "receiving_touchdowns", sort: "receiving_touchdowns" }, { label: "Air Yds", key: "receiving_air_yards", sort: "receiving_air_yards" }, { label: "YAC", key: "yards_after_catch", sort: "yards_after_catch" }, { label: "aDOT", key: "receiving_adot", sort: "receiving_adot", digits: 1 }];
+  if (position === "QB") return [{ label: "Snap", key: "snap_share", sort: "snap_share", digits: 1, percentage: true }, { label: "Pass Y/A", key: "yards_per_pass_attempt", sort: "yards_per_pass_attempt", digits: 1 }, { label: "Pass aDOT", key: "pass_adot", sort: "pass_adot", digits: 1 }, { label: "Rating", key: "passer_rating", sort: "passer_rating", digits: 1 }, { label: "TD %", key: "passing_td_percentage", sort: "passing_td_percentage", digits: 1, percentage: true }, { label: "INT %", key: "interception_percentage", sort: "interception_percentage", digits: 1, percentage: true }, { label: "Pressure", key: "pressure_percentage", sort: "pressure_percentage", digits: 1, percentage: true }];
+  if (position === "RB") return [{ label: "Snap", key: "snap_share", sort: "snap_share", digits: 1, percentage: true }, { label: "Touches", key: "true_touches", sort: "true_touches" }, { label: "Rush Y/C", key: "yards_per_carry", sort: "yards_per_carry", digits: 1 }, { label: "Rush TD %", key: "rushing_td_percentage", sort: "rushing_td_percentage", digits: 1, percentage: true }, { label: "RZ Share", key: "red_zone_rush_share", sort: "red_zone_rush_share", digits: 1, percentage: true }, { label: "GTG Share", key: "goal_to_go_rush_share", sort: "goal_to_go_rush_share", digits: 1, percentage: true }, { label: "Y/Tgt", key: "yards_per_target", sort: "yards_per_target", digits: 1 }];
+  if (position === "WR" || position === "TE") return [{ label: "Snap", key: "snap_share", sort: "snap_share", digits: 1, percentage: true }, { label: "Y/Tgt", key: "yards_per_target", sort: "yards_per_target", digits: 1 }, { label: "Y/Rec", key: "yards_per_reception", sort: "yards_per_reception", digits: 1 }, { label: "Rec aDOT", key: "receiving_adot", sort: "receiving_adot", digits: 1 }, { label: "YAC / Rec", key: "yards_after_catch_per_reception", sort: "yards_after_catch_per_reception", digits: 1 }, { label: "Rec TD %", key: "receiving_td_percentage", sort: "receiving_td_percentage", digits: 1, percentage: true }];
+  return [{ label: "Snap", key: "snap_share", sort: "snap_share", digits: 1, percentage: true }, { label: "Touches", key: "true_touches", sort: "true_touches" }, { label: "Pass Y/A", key: "yards_per_pass_attempt", sort: "yards_per_pass_attempt", digits: 1 }, { label: "Rush Y/C", key: "yards_per_carry", sort: "yards_per_carry", digits: 1 }, { label: "Y/Tgt", key: "yards_per_target", sort: "yards_per_target", digits: 1 }, { label: "Y/Rec", key: "yards_per_reception", sort: "yards_per_reception", digits: 1 }, { label: "Rec aDOT", key: "receiving_adot", sort: "receiving_adot", digits: 1 }, { label: "Pressure", key: "pressure_percentage", sort: "pressure_percentage", digits: 1, percentage: true }];
 }
 
-export function positionMatches(position: string | null, filter: PositionFilter) {
-  if (filter === "ALL") return true;
-  if (filter === "FLEX") return position !== null && ["RB", "WR", "TE"].includes(position);
-  return position === filter;
-}
-
+export function scoringSortColumn(sort: LeaderSort, scoring: ScoringFormat): keyof PlayerSeasonRow { if (sort === "fantasy_points") return SCORING_COLUMNS[scoring].points; if (sort === "fantasy_ppg") return SCORING_COLUMNS[scoring].ppg; return SORT_COLUMNS[sort]; }
+export function positionMatches(position: string | null, filter: PositionFilter) { if (filter === "ALL") return position !== null && FANTASY_POSITIONS.includes(position as typeof FANTASY_POSITIONS[number]); if (filter === "FLEX") return position !== null && ["RB", "WR", "TE"].includes(position); return position === filter; }
 export function normalizeSearch(value: string) { return value.toLowerCase().replace(/[.'’\-]/g, "").replace(/\s+/g, " ").trim(); }
-
-export function searchRank(name: string, query: string, hasSleeperId: boolean, rookieSeason: number | null) {
-  const candidate = normalizeSearch(name); const needle = normalizeSearch(query); const words = candidate.split(" ");
-  let rank = candidate === needle ? 400 : candidate.startsWith(needle) ? 300 : words.some((word) => word.startsWith(needle)) ? 200 : candidate.includes(needle) ? 100 : 0;
-  if (hasSleeperId) rank += 10;
-  if ((rookieSeason ?? 0) >= 2020) rank += 5;
-  return rank;
+export function searchRank(name: string, query: string, hasSleeperId: boolean, rookieSeason: number | null) { const candidate = normalizeSearch(name); const needle = normalizeSearch(query); const words = candidate.split(" "); let rank = candidate === needle ? 400 : candidate.startsWith(needle) ? 300 : words.some((word) => word.startsWith(needle)) ? 200 : candidate.includes(needle) ? 100 : 0; if (hasSleeperId) rank += 10; if ((rookieSeason ?? 0) >= 2020) rank += 5; return rank; }
+const first = (input: string | string[] | undefined) => Array.isArray(input) ? input[0] : input;
+export function parsePlayerFilters(params: Record<string, string | string[] | undefined>): PlayerExplorerFilters {
+  const requestedScoring = first(params.scoring); const requestedPosition = first(params.position); const requestedCategory = first(params.category);
+  const scoring = (["standard", "half_ppr", "ppr"].includes(requestedScoring ?? "") ? requestedScoring : "ppr") as ScoringFormat;
+  const position = (POSITIONS.includes((requestedPosition ?? "ALL") as PositionFilter) ? (requestedPosition ?? "ALL") : "ALL") as PositionFilter;
+  const seasonType = ((first(params.seasonType) ?? first(params.type)) === "POST" ? "POST" : "REG") as "REG" | "POST";
+  const category = (CATEGORIES.includes((requestedCategory ?? "fantasy") as StatCategory) ? (requestedCategory ?? "fantasy") : "fantasy") as StatCategory;
+  const requestedSort = first(params.sort) as LeaderSort | undefined;
+  const validSorts = new Set<LeaderSort>(["fantasy_points", "fantasy_ppg", ...Object.keys(SORT_COLUMNS) as Exclude<LeaderSort, "fantasy_points" | "fantasy_ppg">[]]);
+  const sort = requestedSort && validSorts.has(requestedSort) ? requestedSort : CATEGORY_DEFAULT_SORT[category];
+  return { scoring, position, seasonType, category, sort, page: Math.max(1, Number.parseInt(first(params.page) ?? "1", 10) || 1), view: first(params.view) === "all" ? "all" : "leaders" };
 }

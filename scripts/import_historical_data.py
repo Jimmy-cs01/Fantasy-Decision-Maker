@@ -30,11 +30,14 @@ WEEKLY_REQUIRED = set(LOGICAL_WEEKLY_KEY + ["team", "fantasy_points_standard", "
 WEEKLY_RENAMES = {
     "complete_pass": "completions", "comp_pct": "completion_percentage", "ypa": "yards_per_attempt",
     "pass_touchdown": "passing_touchdowns", "interception": "interceptions", "first_down_pass": "first_down_passes",
+    "pass_td_pct": "source_passing_td_percentage", "int_pct": "source_interception_percentage",
     "times_pressured_pct": "pressure_percentage", "yptarget": "yards_per_target", "ypr": "yards_per_reception",
     "rec_adot": "receiving_adot", "receiving_touchdown": "receiving_touchdowns",
+    "rec_td_pct": "source_receiving_td_percentage",
     "rush_attempts_gtg": "rush_attempts_goal_to_go", "ypc": "yards_per_carry",
     "rush_touchdown": "rushing_touchdowns", "rush_touchdown_red_zone": "rushing_touchdowns_red_zone",
     "rush_touchdown_gtg": "rushing_touchdowns_goal_to_go", "offense_pct": "offense_snap_percentage",
+    "rush_td_pct": "source_rushing_td_percentage", "first_down_rush": "rushing_first_downs",
     "total_tds": "total_touchdowns",
 }
 CONTEXT_COLUMNS = {"player_id", "sleeper_player_id", "season", "week", "season_type", "game_id", "team"}
