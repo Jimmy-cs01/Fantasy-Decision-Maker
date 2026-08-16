@@ -1,10 +1,9 @@
 export type ScoringFormat = "standard" | "half_ppr" | "ppr";
 export type PositionFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX";
 export type SeasonType = "REG" | "POST";
-export type StatCategory = "fantasy" | "passing" | "rushing" | "receiving" | "advanced";
 export type LeaderSort =
   | "fantasy_points" | "fantasy_ppg" | "total_yards" | "total_touchdowns" | "snap_share" | "true_touches"
-  | "pass_attempts" | "completions" | "completion_percentage" | "passing_yards" | "passing_air_yards" | "passing_touchdowns" | "interceptions_thrown" | "yards_per_pass_attempt" | "pass_adot" | "passer_rating" | "passing_td_percentage" | "interception_percentage" | "pressure_percentage" | "passing_epa" | "passing_cpoe" | "pacr"
+  | "pass_attempts" | "completions" | "completion_percentage" | "passing_yards" | "passing_air_yards" | "passing_touchdowns" | "interceptions_thrown" | "yards_per_pass_attempt" | "pass_adot" | "passer_rating" | "passing_td_percentage" | "interception_percentage" | "times_sacked" | "pressure_percentage" | "passing_epa" | "passing_cpoe" | "pacr"
   | "rush_attempts" | "rushing_yards" | "rushing_touchdowns" | "yards_per_carry" | "rushing_td_percentage" | "rush_attempts_red_zone" | "rush_attempts_goal_to_go" | "red_zone_rush_share" | "goal_to_go_rush_share" | "rushing_epa"
   | "targets" | "receptions" | "receiving_yards" | "receiving_touchdowns" | "receiving_air_yards" | "yards_after_catch" | "yards_per_target" | "yards_per_reception" | "receiving_adot" | "yards_after_catch_per_reception" | "receiving_td_percentage" | "receiving_epa" | "racr" | "average_target_share" | "average_air_yards_share" | "average_wopr";
 
@@ -29,4 +28,4 @@ export interface PlayerSeasonRow {
   fantasy_points_standard_per_game: number; fantasy_points_half_ppr_per_game: number; fantasy_points_ppr_per_game: number;
 }
 
-export interface PlayerExplorerFilters { scoring: ScoringFormat; position: PositionFilter; seasonType: SeasonType; category: StatCategory; sort: LeaderSort; page: number; view: "leaders" | "all"; }
+export interface PlayerExplorerFilters { scoring: ScoringFormat; position: PositionFilter; seasonType: SeasonType; sort: LeaderSort; page: number; view: "leaders" | "all"; }
