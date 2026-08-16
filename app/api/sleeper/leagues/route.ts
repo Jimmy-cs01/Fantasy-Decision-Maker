@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { sleeperClient } from "@/lib/sleeper/client";
+
+export async function GET(request: Request) { const parsed = z.object({ username: z.string().trim().min(1).max(64) }).safeParse({ username: new URL(request.url).searchParams.get("username") }); if (!parsed.success) return NextResponse.json({ error: "Enter a valid Sleeper username." }, { status: 400 }); try { const user = await sleeperClient.getUser(parsed.data.username); if (!user) return NextResponse.json({ error: "No Sleeper user was found with that username." }, { status: 404 }); const season = new Date().getFullYear(); const leagues = await sleeperClient.getUserLeagues(user.user_id, season); return NextResponse.json({ user, leagues: leagues.filter((league) => league.sport === "nfl") }); } catch (error) { console.error("Sleeper league lookup failed", error); return NextResponse.json({ error: "Sleeper is unavailable right now. Please try again." }, { status: 502 }); } }

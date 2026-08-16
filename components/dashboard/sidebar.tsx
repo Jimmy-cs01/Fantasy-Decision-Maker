@@ -1,0 +1,5 @@
+import Link from "next/link";
+import { LayoutDashboard, Link2 } from "lucide-react";
+import { signOut } from "@/app/auth/actions";
+
+export function Sidebar() { return <aside className="flex border-b border-slate-800 bg-slate-950/60 p-4 md:min-h-screen md:w-60 md:flex-col md:border-r md:border-b-0"><Link href="/dashboard" className="font-black text-cyan-300">FDM <span className="hidden text-slate-100 md:inline">ANALYTICS</span></Link><nav className="ml-auto flex gap-4 text-sm md:ml-0 md:mt-10 md:flex-col"><Link className="flex items-center gap-2" href="/dashboard"><LayoutDashboard size={16} /> Dashboard</Link><Link className="flex items-center gap-2" href="/dashboard/connect"><Link2 size={16} /> Connect</Link></nav><form className="ml-4 md:mt-auto md:ml-0"><button formAction={signOut} className="text-sm text-slate-400 hover:text-white">Sign out</button></form></aside>; }
