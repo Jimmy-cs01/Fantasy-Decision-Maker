@@ -1,0 +1,24 @@
+player_id,action,sleeper_player_id,note
+00-0020337,match,169,Steve Smith manually verified by birth date
+00-0033114,match,3652,Mike Thomas manually verified by birth date
+00-0037156,match,8861,Irvin Charles to Irv Charles
+00-0039373,match,11579,Audric Estime accent variant
+00-0037292,match,8489,Andrew Ogletree to Drew Ogletree
+00-0036988,match,7670,Josh Palmer to Joshua Palmer
+00-0038911,match,10860,Malik Cunningham manually verified
+00-0036825,match,7531,Feleipe Franks manually verified
+00-0036919,match,7567,Kenneth Gainwell to Kenny Gainwell
+00-0036340,match,6906,Antonio Gandy-Golden manually verified
+00-0037157,match,8122,Bam Knight to Zonovan Knight
+00-0038738,match,11510,Hunter Luepke manually verified
+00-0037450,match,8749,Tyreik McAllister manually verified
+00-0036245,match,7109,Malcolm Perry manually verified
+00-0035956,match,7216,Giovanni Ricci manually verified
+00-0038488,match,11280,Brady Russell manually verified
+00-0036433,match,7149,Tommy Stevens manually verified
+00-0036482,match,7944,Mike Strachan to Michael Strachan
+00-0038839,match,11068,Mitchell Tinsley to Mitch Tinsley
+00-0038489,match,11273,Ben VanSumeren manually verified
+00-0037300,match,8202,Mike Woods to Michael Woods
+00-0025438,unmatched,,Steve Smith deliberately unmatched duplicate identity
+00-0027076,unmatched,,Mike Thomas deliberately unmatched duplicate identity

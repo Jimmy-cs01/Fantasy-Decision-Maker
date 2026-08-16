@@ -66,6 +66,29 @@ npm run lint
 npm test
 ```
 
+## Historical data pipeline
+
+```text
+Kaggle weekly NFL statistics
+        ↓ trim / normalize
+GSIS/Kaggle player identity
+        ↓ optional Sleeper identity mapping
+processed historical weekly stats
+        ↓ PostgreSQL / Supabase
+internal feature engineering → fantasy value model
+```
+
+GSIS/Kaggle `player_id` is the canonical historical external identity. Sleeper IDs are optional text provider mappings, never application primary keys. Historical and Sleeper positions are retained separately because a player can legitimately change positions between data providers. Team is not an identity criterion because the Kaggle team is historical and Sleeper’s team is current.
+
+The raw weekly data, rather than Kaggle's precomputed rolling metrics, is retained for future internal feature engineering. Rebuild the generated, ignored import files with:
+
+```bash
+python3 scripts/match_sleeper_players.py
+python3 scripts/build_historical_weekly_stats.py
+```
+
+Manual mapping corrections are stored in [`data/player_mapping_overrides.csv`](data/player_mapping_overrides.csv). Its `action` is either `match` (with a Sleeper ID) or `unmatched`; generated mapping CSVs should never be manually edited.
+
 ## Future roadmap
 
 - NFL weekly statistics ingestion

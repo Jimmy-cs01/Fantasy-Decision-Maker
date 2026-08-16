@@ -4,4 +4,7 @@ node_modules/
 .env
 coverage/
 *.tsbuildinfo
-data/
+__pycache__/
+/data/processed/
+data/*
+!data/player_mapping_overrides.csv
