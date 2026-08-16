@@ -8,6 +8,7 @@ Supabase by this script.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -16,10 +17,9 @@ MAPPING_FILE = Path("data/player_id_mapping.csv")
 PROCESSED_DIR = Path("data/processed")
 IDENTITY_OUTPUT = PROCESSED_DIR / "player_identity.csv"
 WEEKLY_OUTPUT = PROCESSED_DIR / "historical_weekly_player_stats.csv"
-EXPECTED_SEASONS = tuple(range(2012, 2026))
 FANTASY_POSITIONS = {"QB", "RB", "WR", "TE"}
 SOURCE_COLUMNS = [
-    "player_id", "player_display_name", "position", "position_group", "season", "week",
+    "player_id", "player_display_name", "position", "position_group", "headshot_url", "season", "week",
     "season_type", "team", "opponent_team", "completions", "attempts", "passing_yards",
     "passing_tds", "passing_interceptions", "sacks_suffered", "passing_air_yards",
     "passing_first_downs", "passing_epa", "passing_cpoe", "pacr", "carries",
@@ -28,12 +28,22 @@ SOURCE_COLUMNS = [
     "receiving_yards_after_catch", "receiving_first_downs", "receiving_epa", "racr",
     "target_share", "air_yards_share", "wopr", "fantasy_points", "fantasy_points_ppr",
 ]
-IDENTITY_COLUMNS = [
+REQUIRED_SOURCE_COLUMNS = {
+    "player_id", "player_display_name", "position", "season", "week", "season_type",
+    "team", "attempts", "passing_yards", "passing_tds", "passing_interceptions",
+    "carries", "rushing_yards", "rushing_tds", "targets", "receptions",
+    "receiving_yards", "receiving_tds", "fantasy_points", "fantasy_points_ppr",
+}
+SOURCE_FILE_PATTERN = re.compile(r"^stats_player_week_(\d{4})\.csv$")
+MIN_SOURCE_BYTES = 10_000
+FIRST_HISTORICAL_SEASON = 2012
+MAPPING_IDENTITY_COLUMNS = [
     "player_id", "pfr_player_id", "player_name", "historical_position", "position_group",
     "historical_team", "birth_date", "height", "weight", "college_name", "rookie_season",
     "sleeper_player_id", "sleeper_name", "sleeper_position", "sleeper_fantasy_positions",
     "sleeper_current_team", "match_score", "match_method", "confidence",
 ]
+IDENTITY_COLUMNS = [*MAPPING_IDENTITY_COLUMNS[:11], "headshot_url", *MAPPING_IDENTITY_COLUMNS[11:]]
 WEEKLY_COLUMNS = [
     "player_id", "season", "week", "season_type", "game_id", "team", "opponent_team",
     "historical_position", "pass_attempts", "completions", "completion_percentage",
@@ -67,32 +77,53 @@ def safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 
 def source_files() -> list[Path]:
-    paths = [NFLVERSE_DIR / f"stats_player_week_{season}.csv" for season in EXPECTED_SEASONS]
-    missing = [str(path) for path in paths if not path.is_file()]
+    discovered = []
+    for path in NFLVERSE_DIR.glob("stats_player_week_*.csv"):
+        match = SOURCE_FILE_PATTERN.match(path.name)
+        if match and int(match.group(1)) >= FIRST_HISTORICAL_SEASON:
+            discovered.append((int(match.group(1)), path))
+    if not discovered:
+        raise ValueError(
+            f"No nflverse weekly player-stat files were found for {FIRST_HISTORICAL_SEASON} or later. "
+            "Run the downloader first."
+        )
+    discovered.sort()
+    seasons = [season for season, _ in discovered]
+    missing = sorted(set(range(seasons[0], seasons[-1] + 1)) - set(seasons))
     if missing:
-        raise ValueError(f"Missing nflverse source files: {', '.join(missing)}")
-    return paths
+        raise ValueError(f"Local nflverse weekly source range has missing seasons: {missing}")
+    return [path for _, path in discovered]
 
 
 def load_source_file(path: Path, expected_season: int) -> pd.DataFrame:
+    if path.stat().st_size < MIN_SOURCE_BYTES:
+        raise ValueError(f"{path} is too small to be a valid nflverse weekly CSV.")
     try:
+        header = pd.read_csv(path, nrows=0)
+        validate_required_columns(header, sorted(REQUIRED_SOURCE_COLUMNS), str(path))
+        available_columns = [column for column in SOURCE_COLUMNS if column in header.columns]
         frame = pd.read_csv(
             path,
-            usecols=SOURCE_COLUMNS,
+            usecols=available_columns,
             dtype={"player_id": "string", "season_type": "string", "team": "string", "opponent_team": "string"},
             low_memory=False,
         )
     except ValueError as error:
         raise ValueError(f"{path} is not a valid nflverse weekly player-stat file: {error}") from error
-    validate_required_columns(frame, SOURCE_COLUMNS, str(path))
+    for column in SOURCE_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = pd.NA
     seasons = set(pd.to_numeric(frame["season"], errors="raise").astype(int).unique())
     if seasons != {expected_season}:
         raise ValueError(f"{path} must contain only season {expected_season}; found {sorted(seasons)}")
+    if frame[["week", "season_type"]].isna().any().any():
+        raise ValueError(f"{path} contains null week or season_type values.")
     return frame
 
 
 def load_nflverse() -> pd.DataFrame:
-    frames = [load_source_file(path, season) for path, season in zip(source_files(), EXPECTED_SEASONS)]
+    paths = source_files()
+    frames = [load_source_file(path, int(SOURCE_FILE_PATTERN.match(path.name).group(1))) for path in paths]
     source = pd.concat(frames, ignore_index=True)
     source["position"] = source["position"].astype("string").str.upper()
     source = source[source["position"].isin(FANTASY_POSITIONS)].copy()
@@ -164,7 +195,8 @@ def build_identity(source: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         dtype={"player_id": "string", "sleeper_player_id": "string"},
         keep_default_na=False,
     )
-    validate_required_columns(mapping, IDENTITY_COLUMNS, "player mapping")
+    validate_required_columns(mapping, MAPPING_IDENTITY_COLUMNS, "player mapping")
+    mapping["headshot_url"] = ""
     if mapping["player_id"].duplicated().any():
         raise ValueError("Player mapping contains duplicate player_id values.")
     latest = (
@@ -173,6 +205,14 @@ def build_identity(source: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         .rename(columns={"player_display_name": "nflverse_name", "position": "nflverse_position", "position_group": "nflverse_position_group", "team": "nflverse_team"})
         [["player_id", "nflverse_name", "nflverse_position", "nflverse_position_group", "nflverse_team"]]
     )
+    valid_headshots = source["headshot_url"].astype("string").str.strip().ne("") & source["headshot_url"].notna()
+    latest_headshots = (
+        source.loc[valid_headshots, ["player_id", "season", "week", "headshot_url"]]
+        .sort_values(["season", "week"])
+        .drop_duplicates("player_id", keep="last")
+        [["player_id", "headshot_url"]]
+    )
+    latest = latest.merge(latest_headshots, on="player_id", how="left", validate="one_to_one")
     existing_ids = set(mapping["player_id"])
     new = latest[~latest["player_id"].isin(existing_ids)].copy()
     additions = pd.DataFrame({column: "" for column in IDENTITY_COLUMNS}, index=new.index)
@@ -191,6 +231,7 @@ def build_identity(source: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     identity["historical_position"] = identity["nflverse_position"].fillna(identity["historical_position"])
     identity["position_group"] = identity["nflverse_position_group"].fillna(identity["position_group"])
     identity["historical_team"] = identity["nflverse_team"].fillna(identity["historical_team"])
+    identity["headshot_url"] = identity["headshot_url_y"].fillna(identity["headshot_url_x"])
     identity = identity[IDENTITY_COLUMNS].sort_values("player_id").reset_index(drop=True)
     identity["sleeper_player_id"] = identity["sleeper_player_id"].fillna("").astype("string")
     if identity["sleeper_player_id"].str.endswith(".0").any():
@@ -202,7 +243,8 @@ def validate_weekly_stats(frame: pd.DataFrame) -> int:
     validate_required_columns(frame, WEEKLY_COLUMNS, "weekly stats")
     if frame[["player_id", "season", "week"]].isna().any().any():
         raise ValueError("Weekly stats contains null player_id, season, or week values.")
-    if not frame["season"].between(min(EXPECTED_SEASONS), max(EXPECTED_SEASONS)).all() or not frame["week"].between(1, 30).all():
+    seasons = sorted(frame["season"].dropna().astype(int).unique())
+    if not seasons or seasons != list(range(seasons[0], seasons[-1] + 1)) or not frame["week"].between(1, 30).all():
         raise ValueError("Weekly stats contains invalid season or week values.")
     if set(frame["season_type"].unique()) - {"REG", "POST"}:
         raise ValueError("Weekly stats contains an unsupported season_type.")
@@ -220,7 +262,9 @@ def validate_weekly_stats(frame: pd.DataFrame) -> int:
 
 
 def main() -> None:
-    print("Loading nflverse weekly player stats for 2012–2025...")
+    paths = source_files()
+    source_seasons = [int(SOURCE_FILE_PATTERN.match(path.name).group(1)) for path in paths]
+    print(f"Loading nflverse weekly player stats for {source_seasons[0]}–{source_seasons[-1]}...")
     source = load_nflverse()
     weekly = normalize_weekly(source)
     duplicate_count = validate_weekly_stats(weekly)
@@ -237,7 +281,8 @@ def main() -> None:
     used = identity["player_id"].isin(weekly["player_id"])
     mapped_players = int(identity.loc[used, "sleeper_player_id"].ne("").sum())
     print("\n========== NFLVERSE HISTORICAL ETL ==========")
-    print(f"Source files:               {len(source_files()):,}")
+    print(f"Source files:               {len(paths):,}")
+    print(f"Supported range:            {source_seasons[0]}–{source_seasons[-1]}")
     print(f"Weekly rows produced:       {len(weekly):,}")
     print(f"Duplicate logical rows:     {duplicate_count:,}")
     print(f"Fantasy players:            {weekly['player_id'].nunique():,}")
@@ -249,6 +294,9 @@ def main() -> None:
     print("\nRows by season/type:")
     for (season, season_type), count in counts.items():
         print(f"  {season} {season_type}: {count:,}")
+    print("\nUnique players by season:")
+    for season, count in weekly.groupby("season")["player_id"].nunique().items():
+        print(f"  {season}: {count:,}")
     print(f"\nIdentity output: {IDENTITY_OUTPUT}")
     print(f"Weekly output:   {WEEKLY_OUTPUT}")
 

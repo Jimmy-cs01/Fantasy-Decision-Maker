@@ -1,8 +1,41 @@
 "use server";
-import { z } from "zod";
+
 import { redirect } from "next/navigation";
+import { loginSchema, safeReturnPath, signupSchema } from "@/lib/auth/validation";
 import { createClient } from "@/lib/supabase/server";
 
-export async function signInWithPassword(formData: FormData) { const parsed = z.object({ email: z.email(), password: z.string().min(6) }).safeParse(Object.fromEntries(formData)); if (!parsed.success) redirect("/auth?error=Enter+a+valid+email+and+password."); const supabase = await createClient(); const { error } = await supabase.auth.signInWithPassword(parsed.data); if (error) redirect(`/auth?error=${encodeURIComponent(error.message)}`); redirect("/dashboard"); }
-export async function signUp(formData: FormData) { const parsed = z.object({ email: z.email(), password: z.string().min(6) }).safeParse(Object.fromEntries(formData)); if (!parsed.success) redirect("/auth?error=Use+a+valid+email+and+a+6%2B+character+password."); const supabase = await createClient(); const { error } = await supabase.auth.signUp(parsed.data); if (error) redirect(`/auth?error=${encodeURIComponent(error.message)}`); redirect("/auth?message=Check+your+email+to+confirm+your+account."); }
-export async function signOut() { const supabase = await createClient(); await supabase.auth.signOut(); redirect("/"); }
+function redirectWithError(route: "/auth" | "/signup", message: string, next: string): never {
+  const query = new URLSearchParams({ error: message, next });
+  redirect(`${route}?${query}`);
+}
+
+export async function signInWithPassword(formData: FormData) {
+  const parsed = loginSchema.safeParse(Object.fromEntries(formData));
+  const next = safeReturnPath(formData.get("next"));
+  if (!parsed.success) redirectWithError("/auth", "Enter a valid email and a password of at least 6 characters.", next);
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password });
+  if (error) redirectWithError("/auth", error.message, next);
+  redirect(next);
+}
+
+export async function signUp(formData: FormData) {
+  const parsed = signupSchema.safeParse(Object.fromEntries(formData));
+  const next = safeReturnPath(formData.get("next"));
+  if (!parsed.success) {
+    const mismatch = formData.get("password") !== formData.get("confirmPassword");
+    redirectWithError("/signup", mismatch ? "Passwords must match." : "Use a valid email and a password of at least 6 characters.", next);
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({ email: parsed.data.email, password: parsed.data.password });
+  if (error) redirectWithError("/signup", error.message, next);
+  if (data.session) redirect(next);
+  const query = new URLSearchParams({ message: "Check your email to confirm your account.", next });
+  redirect(`/auth?${query}`);
+}
+
+export async function signOut() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/");
+}

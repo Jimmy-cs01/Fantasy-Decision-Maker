@@ -7,5 +7,7 @@ describe("league synchronization persistence contract", () => {
     expect(source).toContain('onConflict: "owner_id,sleeper_league_id"');
     expect(source).toContain('onConflict: "league_id,sleeper_roster_id"');
     expect(source).toContain('from("roster_players").delete()');
+    expect(source).toContain("assignStarterSlots");
+    expect(source).toContain("roster_slot_index");
   });
 });

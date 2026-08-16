@@ -6,6 +6,7 @@ export const SCORING_COLUMNS: Record<ScoringFormat, { points: keyof PlayerSeason
   standard: { points: "fantasy_points_standard", ppg: "fantasy_points_standard_per_game", label: "Standard" },
   half_ppr: { points: "fantasy_points_half_ppr", ppg: "fantasy_points_half_ppr_per_game", label: "Half PPR" },
   ppr: { points: "fantasy_points_ppr", ppg: "fantasy_points_ppr_per_game", label: "PPR" },
+  league: { points: "fantasy_points_league", ppg: "fantasy_points_league_per_game", label: "League scoring" },
 };
 
 export const SORT_COLUMNS: Record<Exclude<LeaderSort, "fantasy_points" | "fantasy_ppg">, keyof PlayerSeasonRow> = {
@@ -133,13 +134,23 @@ export function searchRank(name: string, query: string, hasSleeperId: boolean, r
 }
 
 const first = (input: string | string[] | undefined) => Array.isArray(input) ? input[0] : input;
+export function resolveScoringSelection(requested: string | undefined, hasSelectedLeague: boolean): ScoringFormat {
+  if (!requested) return hasSelectedLeague ? "league" : "ppr";
+  if (requested === "league") return hasSelectedLeague ? "league" : "ppr";
+  return (["standard", "half_ppr", "ppr"].includes(requested) ? requested : "ppr") as ScoringFormat;
+}
+
+export function resolveSeason(requested: number, availableSeasons: number[]) {
+  return availableSeasons.includes(requested) ? requested : availableSeasons[0];
+}
+
 export function parsePlayerFilters(params: Record<string, string | string[] | undefined>): PlayerExplorerFilters {
   const requestedScoring = first(params.scoring); const requestedPosition = first(params.position);
-  const scoring = (["standard", "half_ppr", "ppr"].includes(requestedScoring ?? "") ? requestedScoring : "ppr") as ScoringFormat;
+  const scoring = (["standard", "half_ppr", "ppr", "league"].includes(requestedScoring ?? "") ? requestedScoring : "ppr") as ScoringFormat;
   const position = (POSITIONS.includes((requestedPosition ?? "ALL") as PositionFilter) ? (requestedPosition ?? "ALL") : "ALL") as PositionFilter;
   const seasonType = ((first(params.seasonType) ?? first(params.type)) === "POST" ? "POST" : "REG") as "REG" | "POST";
   const visibleSorts = new Set(positionColumns(position, scoring).map((item) => item.sort));
   const requestedSort = first(params.sort) as LeaderSort | undefined;
   const sort = requestedSort && visibleSorts.has(requestedSort) ? requestedSort : "fantasy_points";
-  return { scoring, position, seasonType, sort, page: Math.max(1, Number.parseInt(first(params.page) ?? "1", 10) || 1), view: first(params.view) === "all" ? "all" : "leaders" };
+  return { scoring, leagueId: first(params.leagueId) ?? null, position, seasonType, sort, page: Math.max(1, Number.parseInt(first(params.page) ?? "1", 10) || 1), view: first(params.view) === "all" ? "all" : "leaders" };
 }

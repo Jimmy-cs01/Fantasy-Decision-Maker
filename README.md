@@ -1,4 +1,4 @@
-# Fantasy Decision Maker
+# Jim's Fantasy Helper
 
 A personal fantasy football analytics foundation built around Sleeper leagues. It imports a private copy of a user's league data, displays a roster-first dashboard, and leaves clear seams for weekly NFL data and future decision-support features.
 
@@ -80,10 +80,15 @@ internal feature engineering → fantasy value model
 
 Sleeper is the league, roster, and current-identity source. nflverse is the single active NFL statistical source. Supabase stores normalized identities and weekly statistics. nflverse's GSIS `player_id` is the canonical historical external identity; internal UUIDs remain relational primary keys, and Sleeper IDs remain optional text mappings. Historical nflverse position and current Sleeper position are retained separately. Team is not an identity criterion because players change teams.
 
-The ETL reads only the required columns from `data/nflverse/stats_player_week_2012.csv` through `stats_player_week_2025.csv`. It keeps raw counting stats and nflverse EPA/usage features while deriving safe weekly rates and Half PPR scoring internally. Rebuild the generated, ignored import files with:
+The official nflverse `stats_player` release provides a wider historical range, but this project intentionally uses 2012 onward. The downloader defaults to 2012 through the latest available season, validates existing files, and downloads only missing seasons. The ETL ignores any older source files that may already exist locally and validates the contiguous 2012+ range. Play-by-play coverage is a separate dataset and is not used to force earlier weekly history.
+
+Some advanced metrics have shorter or sparser historical coverage than basic box-score statistics. Structurally optional values remain database nulls and render as `—`; the pipeline never replaces genuinely unavailable historical metrics with zero.
+
+Download and rebuild the generated, ignored import files with:
 
 ```bash
-python3 scripts/build_historical_weekly_stats.py
+python3 scripts/download_nflverse_player_stats.py
+npm run data:build
 python3 scripts/compare_historical_providers.py
 ```
 
@@ -95,21 +100,23 @@ python3 scripts/import_historical_data.py --replace-source
 python3 scripts/import_historical_data.py --verify-only
 ```
 
-The importer validates all 14 seasons, identity coverage, logical uniqueness, scoring semantics, and identifier formatting before any remote write. Normal imports are idempotent upserts. `--replace-source` is an explicit destructive mode scoped only to `player_weekly_nfl_statistics` rows for 2012–2025; it never deletes players, Sleeper mappings, leagues, rosters, or auth data. This prevents stale Kaggle rows from surviving a provider-key change.
+The importer requires the processed data to begin in 2012 and validates its contiguous season range, identity coverage, logical uniqueness, scoring semantics, and identifier formatting before any remote write. Normal imports are idempotent upserts. `--replace-source` is an explicit destructive mode scoped only to `provider = nflverse` rows within that validated local range; it never deletes players, Sleeper mappings, leagues, rosters, or auth data.
 
 ## Player stats explorer
 
 Authenticated users can open `/players` for database-backed historical leaderboards and `/players/[playerId]` for season summaries and weekly game logs. Filters use shareable query parameters and include:
 
-- Every imported season from 2012–2025
-- Standard, Half PPR, and PPR scoring
+- Every successfully imported season, currently 2012–2025
+- Synced Sleeper league scoring by default when a league is selected, plus Standard, Half PPR, and PPR fallbacks
 - QB, RB, WR, TE, and FLEX; FLEX means RB + WR + TE and excludes QB
 - Regular season by default, with postseason kept separate
 - Top-50 pagination and sorting by fantasy points, PPG, yards, touchdowns, and usage
 
 Player search queries the local PostgreSQL player table, ranks exact and prefix matches first, and never calls Sleeper while typing. Historical leaderboards use `historical_position`; current identity displays retain `sleeper_position` independently.
 
-Leaderboard categories separate Fantasy, Passing, Rushing, Receiving, and Advanced statistics. Season efficiency is calculated from season totals: completions/attempts, passing yards/attempts, rushing yards/attempts, receiving yards/targets, and receiving yards/receptions. `true_touches` means rushing attempts plus receptions. QB total offense is passing plus rushing; RB/WR/TE total offense is rushing plus receiving. Regular season and postseason are always separate rows. nflverse does not include snaps, pressure events, or red-zone rushing usage in this weekly file, so those fields remain nullable and render as unavailable rather than fabricated zeroes.
+Position-aware grids expose the relevant fantasy, passing, rushing, receiving, usage, and advanced fields for each position. Season efficiency is calculated from season totals: completions/attempts, passing yards/attempts, rushing yards/attempts, receiving yards/targets, and receiving yards/receptions. `true_touches` means rushing attempts plus receptions. QB total offense is passing plus rushing; RB/WR/TE total offense is rushing plus receiving. Regular season and postseason are always separate rows.
+
+League views expose every synchronized fantasy team. Sleeper's ordered starter array is mapped to the league's actual roster-position configuration during synchronization, preserving repeated slots and FLEX/SUPERFLEX assignments. Starters render before a deterministic position/name-sorted bench.
 
 ### Historical provider transition
 
@@ -119,7 +126,8 @@ Migration `20260816040000_nflverse_player_stats.sql` adds provider-neutral nflve
 
 ```bash
 npx supabase db push
-python3 scripts/build_historical_weekly_stats.py
+python3 scripts/download_nflverse_player_stats.py
+npm run data:build
 python3 scripts/import_historical_data.py --dry-run --replace-source
 python3 scripts/import_historical_data.py --replace-source
 ```

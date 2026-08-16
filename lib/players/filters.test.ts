@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { aggregateSeasonRows, type WeeklyAggregateInput } from "./aggregate";
-import { formatStatValue, normalizeSearch, parsePlayerFilters, positionColumns, positionMatches, scoringSortColumn, searchRank } from "./filters";
+import { formatStatValue, normalizeSearch, parsePlayerFilters, positionColumns, positionMatches, POSITIONS, resolveScoringSelection, resolveSeason, scoringSortColumn, searchRank } from "./filters";
 
 const base = { pass_attempts: 0, completions: 0, passing_yards: 0, passing_touchdowns: 0, interceptions: 0, rush_attempts: 10, rushing_yards: 50, rushing_touchdowns: 1, targets: 5, receptions: 4, receiving_yards: 40, receiving_touchdowns: 1, offense_snaps: 40, team_offense_snaps: 60, fantasy_points_standard: 10, fantasy_points_half_ppr: 12, fantasy_points_ppr: 14 };
 const weeks: WeeklyAggregateInput[] = [{ ...base, season: 2024, season_type: "REG" }, { ...base, season: 2024, season_type: "REG", rush_attempts: 20, rushing_yards: 150, targets: 10, receptions: 6, receiving_yards: 60, offense_snaps: 50, team_offense_snaps: 70, fantasy_points_ppr: 16 }, { ...base, season: 2024, season_type: "POST", rushing_touchdowns: 5 }, { ...base, season: 2023, season_type: "REG", rushing_touchdowns: 9 }];
 
 describe("player explorer defaults and filters", () => {
+  it("keeps every direct position option in one stable set", () => { expect(POSITIONS).toEqual(["ALL", "QB", "RB", "WR", "TE", "FLEX"]); });
   it("defines ALL as fantasy positions and FLEX as RB/WR/TE only", () => { expect(["QB", "RB", "WR", "TE"].every((position) => positionMatches(position, "ALL"))).toBe(true); expect(positionMatches("LB", "ALL")).toBe(false); expect(["RB", "WR", "TE"].every((position) => positionMatches(position, "FLEX"))).toBe(true); expect(positionMatches("QB", "FLEX")).toBe(false); });
-  it("creates deterministic initial Leaders defaults without category state or interaction", () => { expect(parsePlayerFilters({})).toEqual({ scoring: "ppr", position: "ALL", seasonType: "REG", sort: "fantasy_points", page: 1, view: "leaders" }); });
+  it("creates deterministic initial Leaders defaults without category state or interaction", () => { expect(parsePlayerFilters({})).toEqual({ scoring: "ppr", leagueId: null, position: "ALL", seasonType: "REG", sort: "fantasy_points", page: 1, view: "leaders" }); });
   it("keeps Leaders and All Players independent", () => { expect(parsePlayerFilters({ view: "leaders" }).view).toBe("leaders"); expect(parsePlayerFilters({ view: "all" }).view).toBe("all"); });
   it("switches ranking columns with scoring format", () => { expect(scoringSortColumn("fantasy_points", "standard")).toBe("fantasy_points_standard"); expect(scoringSortColumn("fantasy_ppg", "half_ppr")).toBe("fantasy_points_half_ppr_per_game"); });
+  it("preserves league scoring and selected league in URL-driven state", () => { expect(parsePlayerFilters({ scoring: "league", leagueId: "league-1", position: "WR" })).toMatchObject({ scoring: "league", leagueId: "league-1", position: "WR" }); });
+  it("defaults to synced league scoring while preserving explicit manual selections", () => { expect(resolveScoringSelection(undefined, true)).toBe("league"); expect(resolveScoringSelection(undefined, false)).toBe("ppr"); expect(resolveScoringSelection("standard", true)).toBe("standard"); expect(resolveScoringSelection("half_ppr", true)).toBe("half_ppr"); expect(resolveScoringSelection("ppr", true)).toBe("ppr"); });
+  it("includes older seasons without changing the latest-season default", () => { const seasons = [2025, 2024, 2000, 1999]; expect(resolveSeason(Number.NaN, seasons)).toBe(2025); expect(resolveSeason(1999, seasons)).toBe(1999); });
   it("resets a sort that is invisible for the selected position", () => { expect(parsePlayerFilters({ position: "WR", sort: "passing_yards" }).sort).toBe("fantasy_points"); expect(parsePlayerFilters({ position: "WR", sort: "receiving_yards" }).sort).toBe("receiving_yards"); });
   it("normalizes and sensibly ranks search matches", () => { expect(normalizeSearch("Ja'Marr-Chase")).toBe("jamarrchase"); expect(searchRank("James Cook", "james cook", true, 2022)).toBeGreaterThan(searchRank("Dalvin James", "james", false, 2017)); });
 });
@@ -24,6 +28,7 @@ describe("position-aware leaderboard columns", () => {
   it("uses generalized component totals for ALL", () => { expect(keys("ALL")).toEqual(expect.arrayContaining(["total_yards", "passing_yards", "rushing_yards", "receiving_yards", "passing_touchdowns", "rushing_touchdowns", "receiving_touchdowns"])); });
   it("maps every visible header to its typed backend sort field", () => { for (const position of ["ALL", "QB", "RB", "WR", "TE", "FLEX"] as const) for (const item of positionColumns(position, "ppr")) expect(scoringSortColumn(item.sort, "ppr")).toBe(item.key); });
   it("uses scoring-specific FPTS and PPG columns", () => { expect(keys("RB")).toEqual(expect.arrayContaining(["fantasy_points_ppr", "fantasy_points_ppr_per_game"])); expect(positionColumns("RB", "standard").map((item) => item.key)).toEqual(expect.arrayContaining(["fantasy_points_standard", "fantasy_points_standard_per_game"])); });
+  it("uses calculated league FPTS and PPG columns for league scoring", () => { expect(positionColumns("RB", "league").map((item) => item.key)).toEqual(expect.arrayContaining(["fantasy_points_league", "fantasy_points_league_per_game"])); });
   it("formats null as a dash without treating a real zero as missing", () => { const snap = positionColumns("QB", "ppr")[0]; expect(formatStatValue(null, snap)).toBe("—"); expect(formatStatValue(0, snap)).toBe("0.0%"); });
 });
 

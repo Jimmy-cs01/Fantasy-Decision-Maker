@@ -1,4 +1,4 @@
-export type ScoringFormat = "standard" | "half_ppr" | "ppr";
+export type ScoringFormat = "standard" | "half_ppr" | "ppr" | "league";
 export type PositionFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX";
 export type SeasonType = "REG" | "POST";
 export type LeaderSort =
@@ -9,6 +9,7 @@ export type LeaderSort =
 
 export interface PlayerSeasonRow {
   player_id: string; full_name: string; historical_position: string | null; sleeper_position: string | null;
+  headshot_url: string | null;
   current_team: string | null; season_teams: string | null; college: string | null; rookie_season: number | null;
   season: number; season_type: SeasonType; games_played: number;
   pass_attempts: number; completions: number; completion_percentage: number | null; passing_yards: number; passing_air_yards: number;
@@ -26,6 +27,14 @@ export interface PlayerSeasonRow {
   total_yards: number; total_touchdowns: number;
   fantasy_points_standard: number; fantasy_points_half_ppr: number; fantasy_points_ppr: number;
   fantasy_points_standard_per_game: number; fantasy_points_half_ppr_per_game: number; fantasy_points_ppr_per_game: number;
+  fantasy_points_league: number | null; fantasy_points_league_per_game: number | null;
 }
 
-export interface PlayerExplorerFilters { scoring: ScoringFormat; position: PositionFilter; seasonType: SeasonType; sort: LeaderSort; page: number; view: "leaders" | "all"; }
+export interface PlayerExplorerFilters { scoring: ScoringFormat; leagueId: string | null; position: PositionFilter; seasonType: SeasonType; sort: LeaderSort; page: number; view: "leaders" | "all"; }
+
+export interface ScoringLeague {
+  id: string;
+  name: string;
+  season: number;
+  scoring_settings: Record<string, number>;
+}
