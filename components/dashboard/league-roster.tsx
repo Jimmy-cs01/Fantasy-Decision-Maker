@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PlayerAvatar } from "../players/player-avatar";
 
 export interface LeagueRosterPlayer {
@@ -9,40 +10,46 @@ export interface LeagueRosterPlayer {
   is_starter: boolean;
   roster_slot: string | null;
   roster_slot_index: number | null;
-  previous_season_ppg: number | null;
+  projected_ppg: number | null;
+  player_value: number | null;
+  position_rank: number | null;
+  overall_rank: number | null;
+  value_tier: string | null;
+  confidence: string | null;
 }
 
-export function LeagueRoster({ players, ppgSeason }: { players: LeagueRosterPlayer[]; ppgSeason: number | null }) {
+export function LeagueRoster({ players, projectionLabel, leagueId }: { players: LeagueRosterPlayer[]; projectionLabel: string | null; leagueId: string }) {
   const starters = players.filter((player) => player.is_starter);
   const bench = players.filter((player) => !player.is_starter);
   return <div className="mt-4 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/45">
-    <RosterGroup title="STARTERS" players={starters} ppgSeason={ppgSeason} />
-    <RosterGroup title="BENCH" players={bench} ppgSeason={ppgSeason} bench />
+    <RosterGroup title="STARTERS" players={starters} projectionLabel={projectionLabel} leagueId={leagueId} />
+    <RosterGroup title="BENCH" players={bench} projectionLabel={projectionLabel} leagueId={leagueId} bench />
   </div>;
 }
 
-function RosterGroup({ title, players, ppgSeason, bench = false }: {
+function RosterGroup({ title, players, projectionLabel, leagueId, bench = false }: {
   title: string;
   players: LeagueRosterPlayer[];
-  ppgSeason: number | null;
+  projectionLabel: string | null;
+  leagueId: string;
   bench?: boolean;
 }) {
   return <section aria-label={title === "STARTERS" ? "Starting lineup" : "Bench"}>
     <div className={`flex items-center justify-between border-y border-slate-800 px-3 py-1.5 first:border-t-0 ${bench ? "bg-slate-900/85" : "bg-cyan-400/7"}`}>
       <h3 className="text-[10px] font-black tracking-[0.2em] text-slate-400">{title}</h3>
-      <span className="text-[10px] font-semibold text-slate-500">{ppgSeason ? `${ppgSeason} REG PPG` : "REG PPG"}</span>
+      <span className="text-[10px] font-semibold text-slate-500">{projectionLabel ? `${projectionLabel} PROJ` : "PROJECTION"}</span>
     </div>
     {players.length ? <div className="divide-y divide-slate-800/80">
-      {players.map((player) => <RosterRow key={player.id} player={player} bench={bench} />)}
+      {players.map((player) => <RosterRow key={player.id} player={player} bench={bench} leagueId={leagueId} />)}
     </div> : <p className="px-3 py-4 text-sm text-slate-500">No {bench ? "bench players" : "starters"} available.</p>}
   </section>;
 }
 
-function RosterRow({ player, bench }: { player: LeagueRosterPlayer; bench: boolean }) {
-  const ppg = player.previous_season_ppg;
+function RosterRow({ player, bench, leagueId }: { player: LeagueRosterPlayer; bench: boolean; leagueId: string }) {
+  const ppg = player.projected_ppg;
   const slot = player.roster_slot || "START";
   const compactSlot = slot === "SUPERFLEX" ? "SFLEX" : slot;
-  return <div className="grid min-h-16 grid-cols-[3.5rem_2.25rem_minmax(0,1fr)_3.5rem] items-center gap-2.5 px-2.5 py-2 sm:grid-cols-[4rem_2.5rem_minmax(0,1fr)_4rem] sm:px-3">
+  return <Link href={`/players/${player.id}?scoring=league&leagueId=${leagueId}`} className="grid min-h-16 grid-cols-[3.5rem_2.25rem_minmax(0,1fr)_4.25rem] items-center gap-2.5 px-2.5 py-2 transition hover:bg-slate-800/45 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-300 sm:grid-cols-[4rem_2.5rem_minmax(0,1fr)_5rem] sm:px-3">
     <span title={bench ? "Bench" : slot} className={`grid h-10 place-items-center rounded-xl px-1 text-[11px] font-black tracking-wide shadow-sm sm:h-11 sm:text-xs ${slotBadgeClass(bench ? "BN" : slot)}`}>
       {bench ? "BN" : compactSlot}
     </span>
@@ -53,10 +60,12 @@ function RosterRow({ player, bench }: { player: LeagueRosterPlayer; bench: boole
         {player.team || "FA"} <span aria-hidden="true">•</span> {player.position || "—"}
       </p>
     </div>
-    <span className="text-right text-sm font-black tabular-nums text-slate-200" aria-label={ppg == null ? "PPG unavailable" : `${ppg.toFixed(1)} points per game`}>
-      {ppg == null ? "—" : ppg.toFixed(1)}
+    <span className="text-right tabular-nums" aria-label={ppg == null ? "Projected PPG unavailable" : `${ppg.toFixed(1)} projected points per game`}>
+      <span className="block text-sm font-black text-slate-100">{ppg == null ? "—" : ppg.toFixed(1)}</span>
+      <span className="mt-0.5 block text-[10px] font-bold text-cyan-300">{player.player_value == null ? "VALUE —" : `VALUE ${player.player_value.toFixed(1)}`}</span>
+      {player.position_rank != null && <span className="mt-0.5 block text-[9px] font-semibold text-slate-500">{player.position}{player.position_rank}</span>}
     </span>
-  </div>;
+  </Link>;
 }
 
 export function slotBadgeClass(slot: string) {

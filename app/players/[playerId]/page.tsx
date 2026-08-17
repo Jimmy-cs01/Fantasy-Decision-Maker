@@ -3,9 +3,13 @@ import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PlayerProjectionCard } from "@/components/players/player-projection-card";
+import { PlayerValueCard } from "@/components/players/player-value-card";
 import { SCORING_COLUMNS, resolveScoringSelection } from "@/lib/players/filters";
 import { getPlayerDetail, getScoringLeagues } from "@/lib/players/queries";
 import { withLeagueScoring, withLeagueWeeklyScoring } from "@/lib/fantasy/league-scoring";
+import { getPlayerProjection } from "@/lib/projections/service";
+import { getPlayerValue } from "@/lib/player-values/service";
 import type { ScoringFormat, SeasonType } from "@/lib/players/types";
 
 const number = (value: unknown) => Number(value ?? 0);
@@ -28,11 +32,23 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
   const summary = detail.summary && scoring === "league" && selectedLeague ? withLeagueScoring(detail.summary, selectedLeague.scoring_settings) : detail.summary;
   const weeks = scoring === "league" && selectedLeague ? detail.weeks.map((week) => withLeagueWeeklyScoring(week, selectedLeague.scoring_settings)) : detail.weeks;
   const position = player.historical_position || player.sleeper_position || "—"; const scoringConfig = SCORING_COLUMNS[scoring];
+  let projection: Awaited<ReturnType<typeof getPlayerProjection>> = null;
+  let playerValue: Awaited<ReturnType<typeof getPlayerValue>> = null;
+  const [projectionResult, valueResult] = await Promise.allSettled([
+    getPlayerProjection(playerId, { leagueId: scoring === "league" ? selectedLeague?.id : undefined, scoring }),
+    getPlayerValue(playerId, selectedLeague?.id),
+  ]);
+  if (projectionResult.status === "fulfilled") projection = projectionResult.value;
+  else console.error("Unable to load player projection", projectionResult.reason);
+  if (valueResult.status === "fulfilled") playerValue = valueResult.value;
+  else console.error("Unable to load Player Value", valueResult.reason);
   const height = player.height ? `${Math.floor(player.height / 12)}′${player.height % 12}″` : "—";
   const hasPassing = summary && number(summary.pass_attempts) > 0; const hasRushing = summary && number(summary.rush_attempts) > 0; const hasReceiving = summary && number(summary.targets) > 0;
   return <div className="mx-auto max-w-6xl">
     <Link className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white" href={`/players?scoring=${scoring}${selectedLeague ? `&leagueId=${selectedLeague.id}` : ""}`}><ArrowLeft size={16} /> Back to players</Link>
     <header className="mt-5 flex flex-wrap items-start justify-between gap-5"><div><div className="flex items-center gap-3"><h1 className="text-4xl font-black">{player.full_name}</h1><span className="rounded-lg bg-cyan-400/15 px-3 py-1 font-bold text-cyan-200">{position}</span></div><p className="mt-2 text-slate-400">{player.team || "No current team"}{player.sleeper_position && player.sleeper_position !== player.historical_position ? ` · Sleeper ${player.sleeper_position}` : ""}</p><p className="mt-1 text-sm text-slate-500">{player.college || "College unavailable"}{player.rookie_season ? ` · Rookie ${player.rookie_season}` : ""} · {height} / {player.weight ? `${player.weight} lb` : "—"}</p></div>{seasons.length > 0 && <form className="grid grid-cols-3 gap-2"><label className="text-xs text-slate-400">Season<select name="season" defaultValue={season ?? undefined} className="mt-1 block rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white">{seasons.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-xs text-slate-400">Scoring<select name="scoring" defaultValue={scoring} className="mt-1 block rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white">{scoringLeagues.length > 0 && <option value="league">League Scoring</option>}<option value="standard">Standard</option><option value="half_ppr">Half PPR</option><option value="ppr">PPR</option></select></label><label className="text-xs text-slate-400">Type<select name="seasonType" defaultValue={seasonType} className="mt-1 block rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white"><option value="REG">REG</option><option value="POST">POST</option></select></label>{scoringLeagues.length > 0 && <label className="col-span-3 text-xs text-slate-400">Sleeper league<select name="leagueId" defaultValue={selectedLeague?.id} className="mt-1 block w-full rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white">{scoringLeagues.map((league) => <option key={league.id} value={league.id}>{league.name} · {league.season}</option>)}</select></label>}<Button className="col-span-3 py-1.5 text-sm">Update season</Button></form>}</header>
+    {projection && <PlayerProjectionCard projection={projection} position={position} />}
+    {playerValue && <PlayerValueCard value={playerValue} leagueName={selectedLeague?.name} />}
     {summary ? <>
       <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label={`${SCORING_COLUMNS[scoring].label} PPG`} value={display(summary[scoringConfig.ppg], 1)} accent /><Metric label="Games" value={display(summary.games_played)} /><Metric label="Total Yards" value={display(summary.total_yards)} /><Metric label="Total Touchdowns" value={display(summary.total_touchdowns)} /></section>
       <div className="mt-6 grid gap-5 lg:grid-cols-2"><StatSection title="Fantasy summary" stats={[["Standard", summary.fantasy_points_standard, "", 1], ["Half PPR", summary.fantasy_points_half_ppr, "", 1], ["PPR", summary.fantasy_points_ppr, "", 1], ...(scoring === "league" ? [["League", summary.fantasy_points_league, "", 1] as Stat] : []), ["True Touches", summary.true_touches], ["Snap Share", summary.snap_share, "%", 1, true], ["Games", summary.games_played]]} />
