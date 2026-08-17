@@ -128,6 +128,40 @@ class ProjectionFeatureTests(unittest.TestCase):
 
 
 class ProjectionScoringAndPersistenceTests(unittest.TestCase):
+    def test_projection_dry_run_validation_rejects_truncated_driver_json(self):
+        frame = pd.DataFrame([{
+            "gsis_id": "00-1",
+            "projected_stats": '{"targets":7}',
+            "drivers": '["P',
+        }])
+        with self.assertRaisesRegex(ValueError, "Invalid drivers JSON.*00-1"):
+            projection_importer.validate_export_json(frame)
+
+    def test_projection_importer_retries_an_incomplete_json_response(self):
+        class Response:
+            def __init__(self, body):
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return self.body
+
+        client = projection_importer.SupabaseRest.__new__(projection_importer.SupabaseRest)
+        client.url = "https://example.supabase.co"
+        client.key = "test"
+        with mock.patch.object(
+            projection_importer.urllib.request,
+            "urlopen",
+            side_effect=[Response(b'{"id":'), Response(b'[{"id":"model-1"}]')],
+        ), mock.patch.object(projection_importer.time, "sleep"):
+            result = client.request("GET", "model_versions")
+        self.assertEqual(result, [{"id": "model-1"}])
+
     def test_projection_importer_loads_local_environment_without_overwriting_shell(self):
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env.local"

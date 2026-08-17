@@ -29,7 +29,12 @@ export async function getPlayerProjection(
     .eq("season_type", "REG");
   if (options.season) query = query.eq("season", options.season);
   if (options.week) query = query.eq("week", options.week);
-  const { data, error } = await query.order("season", { ascending: false }).order("week", { ascending: false }).limit(1).maybeSingle();
+  const { data, error } = await query
+    .order("season", { ascending: false })
+    .order("week", { ascending: false })
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (error) throw new Error(`Unable to load player projection: ${error.message}`);
   if (!data) return null;
 
@@ -45,4 +50,3 @@ export async function getPlayerProjection(
     position: player?.sleeper_position ?? player?.historical_position,
   });
 }
-

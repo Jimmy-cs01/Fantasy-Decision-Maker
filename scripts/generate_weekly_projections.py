@@ -91,10 +91,10 @@ def main() -> None:
                 "residual_low": round(low, 3),
                 "residual_high": round(high, 3),
                 "confidence": confidence_for(source, width),
-                "drivers": json.dumps(
+                "drivers": json.dumps((
                     projection_drivers(source)
                     + (["Component stat models were calibrated to the direct fantasy projection"] if abs(calibration_factor - 1) >= 0.15 else [])
-                )[:3],
+                )[:3]),
                 "model_version": args.version,
             })
     output = pd.DataFrame(rows).sort_values(["position", "model_projection_ppr"], ascending=[True, False])

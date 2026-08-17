@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +19,8 @@ else:
     from projection_pipeline.config import ARTIFACT_ROOT, PROJECTION_OUTPUT_PATH
 
 ENV_FILES = (Path(".env.local"), Path(".env"))
+MAX_REQUEST_ATTEMPTS = 6
+RETRYABLE_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
 
 def load_local_environment() -> None:
@@ -53,23 +56,85 @@ class SupabaseRest:
             headers["Content-Type"] = "application/json"
         if prefer:
             headers["Prefer"] = prefer
-        request = urllib.request.Request(
-            f"{self.url}/rest/v1/{path}",
-            data=json.dumps(payload).encode() if payload is not None else None,
-            headers=headers,
-            method=method,
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                body = response.read()
-                return json.loads(body) if body else None
-        except urllib.error.HTTPError as error:
-            raise RuntimeError(f"Supabase request failed ({error.code}): {error.read().decode()}") from error
+        encoded = json.dumps(payload, separators=(",", ":")).encode() if payload is not None else None
+        endpoint = path.split("?", 1)[0]
+        for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+            request = urllib.request.Request(
+                f"{self.url}/rest/v1/{path}",
+                data=encoded,
+                headers={**headers, "Accept": "application/json"},
+                method=method,
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    body = response.read()
+                if not body:
+                    return None
+                try:
+                    return json.loads(body)
+                except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                    if attempt == MAX_REQUEST_ATTEMPTS:
+                        raise RuntimeError(
+                            f"Supabase {method} {endpoint} returned an incomplete JSON response "
+                            f"after {MAX_REQUEST_ATTEMPTS} attempts."
+                        ) from error
+                    delay = min(2 ** (attempt - 1), 16)
+                    print(
+                        f"Incomplete Supabase response during {method} {endpoint}; "
+                        f"retrying in {delay}s ({attempt}/{MAX_REQUEST_ATTEMPTS})..."
+                    )
+                    time.sleep(delay)
+            except urllib.error.HTTPError as error:
+                detail = error.read().decode(errors="replace")
+                if error.code not in RETRYABLE_HTTP_STATUSES or attempt == MAX_REQUEST_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Supabase {method} {endpoint} failed ({error.code}): {detail}"
+                    ) from error
+                retry_after = error.headers.get("Retry-After") if error.headers else None
+                delay = float(retry_after) if retry_after and retry_after.isdigit() else min(2 ** (attempt - 1), 16)
+                print(
+                    f"Transient Supabase {error.code} during {method} {endpoint}; "
+                    f"retrying in {delay:g}s ({attempt}/{MAX_REQUEST_ATTEMPTS})..."
+                )
+                time.sleep(delay)
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
+                if attempt == MAX_REQUEST_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Supabase {method} {endpoint} failed after "
+                        f"{MAX_REQUEST_ATTEMPTS} attempts: {error}"
+                    ) from error
+                delay = min(2 ** (attempt - 1), 16)
+                print(
+                    f"Transient connection failure during {method} {endpoint}: {error}; "
+                    f"retrying in {delay}s ({attempt}/{MAX_REQUEST_ATTEMPTS})..."
+                )
+                time.sleep(delay)
+        raise AssertionError("Supabase request retry loop exited unexpectedly.")
 
 
 def chunks(rows: list[dict], size: int = 500):
     for start in range(0, len(rows), size):
         yield rows[start:start + size]
+
+
+def parse_json_cell(value: object, field: str, row_number: int, gsis_id: str):
+    try:
+        return json.loads(str(value))
+    except (json.JSONDecodeError, TypeError) as error:
+        raise ValueError(
+            f"Invalid {field} JSON at CSV row {row_number} for GSIS ID {gsis_id}: {error}"
+        ) from error
+
+
+def validate_export_json(frame: pd.DataFrame) -> None:
+    for index, record in enumerate(frame.to_dict("records"), start=2):
+        gsis_id = str(record["gsis_id"])
+        parse_json_cell(record["projected_stats"], "projected_stats", index, gsis_id)
+        drivers = parse_json_cell(record["drivers"], "drivers", index, gsis_id)
+        if not isinstance(drivers, list) or not all(isinstance(driver, str) for driver in drivers):
+            raise ValueError(
+                f"drivers must be a JSON string array at CSV row {index} for GSIS ID {gsis_id}"
+            )
 
 
 def build_rows(frame: pd.DataFrame, player_ids: dict[str, str], model_version_id: str) -> list[dict]:
@@ -83,7 +148,7 @@ def build_rows(frame: pd.DataFrame, player_ids: dict[str, str], model_version_id
             "player_id": player_ids[gsis_id], "model_version_id": model_version_id,
             "season": int(record["season"]), "week": int(record["week"]), "season_type": record["season_type"],
             "team": nullable(record["team"]), "opponent_team": nullable(record["opponent_team"]),
-            "projected_stats": json.loads(record["projected_stats"]),
+            "projected_stats": parse_json_cell(record["projected_stats"], "projected_stats", len(rows) + 2, gsis_id),
             "model_projection_ppr": float(record["model_projection_ppr"]),
             "projected_points_standard": float(record["projected_points_standard"]),
             "projected_points_half_ppr": float(record["projected_points_half_ppr"]),
@@ -91,7 +156,7 @@ def build_rows(frame: pd.DataFrame, player_ids: dict[str, str], model_version_id
             "floor_ppr": float(record["floor_ppr"]), "median_ppr": float(record["median_ppr"]),
             "ceiling_ppr": float(record["ceiling_ppr"]), "residual_low": float(record["residual_low"]),
             "residual_high": float(record["residual_high"]), "confidence": record["confidence"],
-            "drivers": json.loads(record["drivers"]),
+            "drivers": parse_json_cell(record["drivers"], "drivers", len(rows) + 2, gsis_id),
         })
     return rows
 
@@ -109,6 +174,7 @@ def main() -> None:
         raise ValueError(f"Projection export model versions {sorted(exported_versions)} do not match {args.version}")
     if frame.duplicated(["gsis_id", "season", "week", "season_type"]).any():
         raise ValueError("Projection export contains duplicate player-week rows")
+    validate_export_json(frame)
     if args.dry_run:
         print(f"Validated {len(frame):,} projection rows for model {args.version}; no remote writes performed.")
         return

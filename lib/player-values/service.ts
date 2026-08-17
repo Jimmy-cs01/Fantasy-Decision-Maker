@@ -102,14 +102,31 @@ export async function getProjectionHistoryRows(
   if (!playerIds.length) return [];
   const rows: PlayerSeasonRow[] = [];
   for (let start = 0; start < playerIds.length; start += 500) {
-    const { data, error } = await db.from("player_season_stats")
-      .select("*")
-      .in("player_id", playerIds.slice(start, start + 500))
-      .gte("season", season - 3)
-      .lte("season", season)
-      .eq("season_type", "REG");
-    if (error) throw new Error("Unable to load projection history: " + error.message);
-    rows.push(...((data ?? []) as PlayerSeasonRow[]));
+    let loaded = false;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const { data, error } = await db.from("player_season_stats")
+        .select("*")
+        .in("player_id", playerIds.slice(start, start + 500))
+        .gte("season", season - 3)
+        .lte("season", season)
+        .eq("season_type", "REG");
+      if (!error) {
+        rows.push(...((data ?? []) as PlayerSeasonRow[]));
+        loaded = true;
+        break;
+      }
+      const transient = /fetch failed|network|timeout|econnreset|connection/i.test(error.message);
+      if (!transient) throw new Error("Unable to load projection history: " + error.message);
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 200));
+        continue;
+      }
+      console.warn(
+        "Projection history is temporarily unavailable; calculating values without the historical prior.",
+      );
+      return [];
+    }
+    if (!loaded) return [];
   }
   return rows;
 }
