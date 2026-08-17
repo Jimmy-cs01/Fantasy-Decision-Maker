@@ -16,11 +16,18 @@ describe("Trade Finder route", () => {
 
   it("supports separate manual and automatic modes", () => {
     expect(component).toContain("Manual Trade");
-    expect(component).toContain("Auto Finder");
-    expect(component).toContain("Find for Player");
-    expect(component).toContain("Search Whole Roster");
+    expect(component).toContain("Find Trades");
+    expect(component).toContain("Specific Player");
+    expect(component).toContain("Whole Roster");
     expect(component).toContain("analyticsAvailable");
-    expect(component).toContain("manual player selection remains");
+    expect(component).not.toContain("<select");
+    expect(component).toContain("Search name, position, team");
+    expect(component).toContain("aria-pressed={selected}");
+  });
+
+  it("hydrates projected and prior-season PPG in the shared batched league query", () => {
+    expect(page).toContain("player.last_season_ppg");
+    expect(page).toContain("getLeagueRosterAnalytics");
   });
 
   it("has a route error boundary for required league or roster failures", () => {

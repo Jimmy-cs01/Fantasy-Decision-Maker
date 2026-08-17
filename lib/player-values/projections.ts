@@ -1,6 +1,9 @@
 import { calculateProjectedFantasyPoints } from "../projections/scoring";
 import { EARLY_SEASON_PRIOR } from "./config";
-import type { ProjectedStatLine, ProjectionConfidence } from "../projections/types";
+import type {
+  ProjectedStatLine,
+  ProjectionConfidence,
+} from "../projections/types";
 import { VALUE_POSITIONS } from "./replacement";
 import type { FantasyPosition, ValuePlayerProjection } from "./types";
 
@@ -22,29 +25,40 @@ export interface ValueProjectionRecord {
   residual_low: number;
   residual_high: number;
   confidence: ProjectionConfidence;
-  players: {
-    id: string;
-    full_name: string;
-    position: string | null;
-    sleeper_position: string | null;
-    historical_position: string | null;
-    team: string | null;
-    headshot_url: string | null;
-    sleeper_player_id: string | null;
-    birth_date?: string | null;
-    rookie_season?: number | null;
-  } | Array<{
-    id: string;
-    full_name: string;
-    position: string | null;
-    sleeper_position: string | null;
-    historical_position: string | null;
-    team: string | null;
-    headshot_url: string | null;
-    sleeper_player_id: string | null;
-    birth_date?: string | null;
-    rookie_season?: number | null;
-  }> | null;
+  players:
+    | {
+        id: string;
+        full_name: string;
+        position: string | null;
+        sleeper_position: string | null;
+        historical_position: string | null;
+        team: string | null;
+        headshot_url: string | null;
+        sleeper_player_id: string | null;
+        birth_date?: string | null;
+        rookie_season?: number | null;
+        draft_year?: number | null;
+        draft_round?: number | null;
+        draft_pick?: number | null;
+        draft_status?: "drafted" | "undrafted" | "unknown" | null;
+      }
+    | Array<{
+        id: string;
+        full_name: string;
+        position: string | null;
+        sleeper_position: string | null;
+        historical_position: string | null;
+        team: string | null;
+        headshot_url: string | null;
+        sleeper_player_id: string | null;
+        birth_date?: string | null;
+        rookie_season?: number | null;
+        draft_year?: number | null;
+        draft_round?: number | null;
+        draft_pick?: number | null;
+        draft_status?: "drafted" | "undrafted" | "unknown" | null;
+      }>
+    | null;
 }
 
 export function projectionIdentity(record: ValueProjectionRecord) {
@@ -58,13 +72,22 @@ export interface ProjectionPrior {
 }
 
 export function priorInfluence(currentSeasonGames: number) {
-  return EARLY_SEASON_PRIOR.preseasonWeight
-    * Math.max(0, 1 - currentSeasonGames / EARLY_SEASON_PRIOR.decayGames);
+  return (
+    EARLY_SEASON_PRIOR.preseasonWeight *
+    Math.max(0, 1 - currentSeasonGames / EARLY_SEASON_PRIOR.decayGames)
+  );
 }
 
-export function stabilizeProjection(projectedPpg: number, prior: ProjectionPrior | undefined) {
+export function stabilizeProjection(
+  projectedPpg: number,
+  prior: ProjectionPrior | undefined,
+) {
   if (!prior || prior.games < EARLY_SEASON_PRIOR.minimumPriorGames) {
-    return { ppg: projectedPpg, priorWeight: 0, priorSeasonPpg: prior?.ppg ?? null };
+    return {
+      ppg: projectedPpg,
+      priorWeight: 0,
+      priorSeasonPpg: prior?.ppg ?? null,
+    };
   }
   const priorWeight = priorInfluence(prior.currentSeasonGames ?? 0);
   return {
@@ -82,29 +105,48 @@ export function scoreProjectionPool(
 ) {
   return records.flatMap((record): ValuePlayerProjection[] => {
     const player = projectionIdentity(record);
-    const position = (player?.sleeper_position ?? player?.position ?? player?.historical_position)?.toUpperCase() as FantasyPosition | undefined;
+    const position = (
+      player?.sleeper_position ??
+      player?.position ??
+      player?.historical_position
+    )?.toUpperCase() as FantasyPosition | undefined;
     if (!player || !position || !VALUE_POSITIONS.includes(position)) return [];
-    const modelPpg = calculateProjectedFantasyPoints(record.projected_stats, scoringSettings, position);
-    const stabilized = stabilizeProjection(modelPpg, priors.get(record.player_id));
+    const modelPpg = calculateProjectedFantasyPoints(
+      record.projected_stats,
+      scoringSettings,
+      position,
+    );
+    const prior = priors.get(record.player_id);
+    const stabilized = stabilizeProjection(modelPpg, prior);
     const shift = stabilized.ppg - modelPpg;
     const depth = depthRoles.get(record.player_id);
-    return [{
-      playerId: record.player_id,
-      season: record.season,
-      fullName: player.full_name,
-      position,
-      projectedPpg: stabilized.ppg,
-      floorPpg: Math.max(0, modelPpg + Number(record.residual_low) + shift),
-      ceilingPpg: Math.max(0, modelPpg + Number(record.residual_high) + shift),
-      confidence: record.confidence,
-      projectedStats: record.projected_stats,
-      priorSeasonPpg: stabilized.priorSeasonPpg,
-      priorWeight: stabilized.priorWeight,
-      birthDate: player.birth_date ?? null,
-      rookieSeason: player.rookie_season ?? null,
-      depthPosition: depth?.depthPosition ?? null,
-      depthRank: depth?.depthRank ?? null,
-      depthStarter: depth?.isStarter ?? null,
-    }];
+    return [
+      {
+        playerId: record.player_id,
+        season: record.season,
+        fullName: player.full_name,
+        position,
+        projectedPpg: stabilized.ppg,
+        floorPpg: Math.max(0, modelPpg + Number(record.residual_low) + shift),
+        ceilingPpg: Math.max(
+          0,
+          modelPpg + Number(record.residual_high) + shift,
+        ),
+        confidence: record.confidence,
+        projectedStats: record.projected_stats,
+        priorSeasonPpg: stabilized.priorSeasonPpg,
+        priorWeight: stabilized.priorWeight,
+        birthDate: player.birth_date ?? null,
+        rookieSeason: player.rookie_season ?? null,
+        historicalGames: (prior?.games ?? 0) + (prior?.currentSeasonGames ?? 0),
+        draftYear: player.draft_year ?? null,
+        draftRound: player.draft_round ?? null,
+        draftPick: player.draft_pick ?? null,
+        draftStatus: player.draft_status ?? null,
+        depthPosition: depth?.depthPosition ?? null,
+        depthRank: depth?.depthRank ?? null,
+        depthStarter: depth?.isStarter ?? null,
+      },
+    ];
   });
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { findTradeSuggestions, tradeTotals, type TradePlayer } from "./engine";
+import {
+  findTradeSuggestions,
+  tradePackages,
+  tradeTotals,
+  type TradePlayer,
+} from "./engine";
 
 const player = (
   id: string,
@@ -72,6 +77,14 @@ describe("Trade Finder", () => {
       results.every((result) =>
         result.send.some((item) => item.id === "my-rb"),
       ),
+    ).toBe(true);
+  });
+
+  it("builds only packages containing the requested player instead of filtering a whole-roster search", () => {
+    const packages = tradePackages(mine, 2, "my-rb");
+    expect(packages).toHaveLength(mine.length);
+    expect(
+      packages.every((items) => items.some((item) => item.id === "my-rb")),
     ).toBe(true);
   });
 

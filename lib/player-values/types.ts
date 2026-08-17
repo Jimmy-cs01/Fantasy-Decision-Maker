@@ -1,4 +1,7 @@
-import type { ProjectionConfidence, ProjectedStatLine } from "../projections/types";
+import type {
+  ProjectionConfidence,
+  ProjectedStatLine,
+} from "../projections/types";
 
 export type FantasyPosition = "QB" | "RB" | "WR" | "TE";
 
@@ -22,6 +25,11 @@ export interface ValuePlayerProjection {
   priorWeight?: number;
   birthDate?: string | null;
   rookieSeason?: number | null;
+  historicalGames?: number;
+  draftYear?: number | null;
+  draftRound?: number | null;
+  draftPick?: number | null;
+  draftStatus?: "drafted" | "undrafted" | "unknown" | null;
   depthPosition?: string | null;
   depthRank?: number | null;
   depthStarter?: boolean | null;
@@ -57,6 +65,9 @@ export interface PlayerValueResult {
   priorWeight: number;
   ageAdjustment: number;
   depthAdjustment: number;
+  draftAdjustment: number;
+  opportunityConfidence: number;
+  draftLabel: string | null;
   depthRole: string | null;
   overallRank: number;
   positionRank: number;

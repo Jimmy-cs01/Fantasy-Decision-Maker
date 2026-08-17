@@ -131,6 +131,26 @@ describe("league analytics partial failures", () => {
     warning.mockRestore();
   });
 
+  it("requests optional history and depth in one roster-sized batch", async () => {
+    const history = vi.fn<
+      LeagueAnalyticsDependencies["getProjectionHistoryRows"]
+    >(async () => []);
+    const depth = vi.fn<LeagueAnalyticsDependencies["getCurrentDepthRoles"]>(
+      async () => new Map(),
+    );
+    await getLeagueRosterAnalytics(
+      database() as never,
+      league,
+      teams,
+      dependencies({
+        getProjectionHistoryRows: history,
+        getCurrentDepthRoles: depth,
+      }),
+    );
+    expect(history.mock.calls[0][1]).toEqual(["player-1"]);
+    expect(depth.mock.calls[0][1]).toEqual(["player-1"]);
+  });
+
   it("keeps roster players and neutral depth when historical PPG fails", async () => {
     const warning = vi
       .spyOn(console, "warn")

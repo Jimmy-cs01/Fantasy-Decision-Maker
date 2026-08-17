@@ -12,6 +12,7 @@ import {
   getProjectionHistoryRows,
 } from "./service";
 import { optimizeProjectedLineup } from "./lineup";
+import { calculateLeagueSeasonPoints } from "../fantasy/league-scoring";
 import type { CombinedPlayerValue, ValueLeagueConfig } from "./types";
 import { analyticsErrorDetails, optionalQuery } from "./optional-query";
 
@@ -28,6 +29,7 @@ export interface LeagueAnalyticsPlayer {
   roster_slot: string | null;
   roster_slot_index: number | null;
   projected_ppg: number | null;
+  last_season_ppg: number | null;
   player_value: number | null;
   position_rank: number | null;
   overall_rank: number | null;
@@ -135,14 +137,24 @@ export async function getLeagueRosterAnalytics(
     rosterPositions: league.roster_positions ?? [],
     scoringSettings,
   };
-  const playerIds = latest?.records.map((record) => record.player_id) ?? [];
+  const rosteredPlayerIds = [
+    ...new Set(
+      ((rosterPlayersData ?? []) as RosterPlayerRow[]).flatMap((entry) => {
+        const identity = Array.isArray(entry.players)
+          ? entry.players[0]
+          : entry.players;
+        return identity?.id ? [identity.id] : [];
+      }),
+    ),
+  ];
+  const playerIds = latest ? rosteredPlayerIds : [];
   const [history, depthRoles] = latest
     ? await Promise.all([
         optionalQuery({
           label: "League projection history lookup failed",
           fallback: [],
           metadata: {
-            source: "Supabase/player_season_stats",
+            source: "Supabase/player_value_season_history",
             leagueId: league.id,
             season: latest.season,
           },
@@ -186,6 +198,18 @@ export async function getLeagueRosterAnalytics(
   }
   const values =
     valueContexts?.byPlayerId ?? new Map<string, CombinedPlayerValue>();
+  const priorSeason = (latest?.season ?? 0) - 1;
+  const lastSeasonPpgByPlayerId = new Map(
+    history
+      .filter(
+        (row) => row.season === priorSeason && Number(row.games_played) > 0,
+      )
+      .map((row) => [
+        row.player_id,
+        calculateLeagueSeasonPoints(row, scoringSettings) /
+          Number(row.games_played),
+      ]),
+  );
   const entriesByRoster = new Map<string, RosterPlayerRow[]>();
   for (const entry of (rosterPlayersData ?? []) as RosterPlayerRow[]) {
     entriesByRoster.set(entry.roster_id, [
@@ -226,6 +250,7 @@ export async function getLeagueRosterAnalytics(
               ? (fallback?.rosterSlotIndex ?? entry.roster_slot_index)
               : entry.roster_slot_index,
             projected_ppg: playerValue?.projectedPpg ?? null,
+            last_season_ppg: lastSeasonPpgByPlayerId.get(identity.id) ?? null,
             player_value: playerValue?.value ?? null,
             position_rank: playerValue?.positionRank ?? null,
             overall_rank: playerValue?.overallRank ?? null,

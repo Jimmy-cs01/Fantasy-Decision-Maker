@@ -1,13 +1,29 @@
 {
   "defaultLeague": {
     "teams": 10,
-    "rosterPositions": ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX", "BN", "BN", "BN", "BN", "BN", "BN"],
+    "rosterPositions": [
+      "QB",
+      "RB",
+      "RB",
+      "WR",
+      "WR",
+      "TE",
+      "FLEX",
+      "FLEX",
+      "BN",
+      "BN",
+      "BN",
+      "BN",
+      "BN",
+      "BN"
+    ],
     "scoringSettings": { "rec": 0.5 }
   },
   "weights": {
     "floorVorp": 0.1,
     "upside": 0.2,
     "scarcity": 0.15,
+    "opportunityCost": 0.75,
     "confidence": { "high": 1.0, "medium": 0.98, "low": 0.96 }
   },
   "displayCalibration": {

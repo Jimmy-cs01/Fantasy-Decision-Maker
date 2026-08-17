@@ -15,12 +15,16 @@
     "data:schedules": "python3 scripts/download_nflverse_schedules.py",
     "data:depth-charts": "python3 scripts/download_nflverse_depth_charts.py",
     "data:depth-charts:import:dry-run": "python3 scripts/import_depth_charts.py --dry-run",
+    "data:players": "python3 scripts/download_nflverse_players.py",
+    "data:players:import:dry-run": "python3 scripts/import_player_draft_capital.py --dry-run",
     "data:import:dry-run": "python3 scripts/import_historical_data.py --dry-run",
     "projection:features": "python3 scripts/build_projection_dataset.py",
     "projection:train": "python3 scripts/train_projection_model.py --version v2",
     "projection:evaluate": "python3 scripts/evaluate_projection_model.py --version v2",
     "projection:generate": "python3 scripts/generate_weekly_projections.py",
-    "value:calibrate": "python3 scripts/calibrate_player_values.py"
+    "value:calibrate": "python3 scripts/calibrate_player_values.py",
+    "value:archetypes": "vite-node scripts/report_player_value_archetypes.ts",
+    "trade:benchmark": "vite-node scripts/benchmark_trade_finder.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

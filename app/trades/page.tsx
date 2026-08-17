@@ -113,6 +113,7 @@ export default async function TradesPage({
         headshotUrl: player.headshot_url,
         value: player.player_value,
         projectedPpg: player.projected_ppg,
+        lastSeasonPpg: player.last_season_ppg,
       })),
     };
   });

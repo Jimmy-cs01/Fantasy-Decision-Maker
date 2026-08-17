@@ -19,15 +19,24 @@ npm run dev
 
 Open `http://localhost:3000`. Create a Supabase project, copy its URL and anon key into `.env.local`, then run the SQL migration below.
 
+For local auth emails and callbacks, set `NEXT_PUBLIC_SITE_URL=http://localhost:3000` in `.env.local` (or `http://localhost:3001` when running that port). Production must set it explicitly to `https://jimmygm.com`.
+
 ## Environment variables
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=https://jimmygm.com # production; use localhost in .env.local
 SUPABASE_SERVICE_ROLE_KEY= # server/admin importer only; never expose to browser code
 ```
 
-The app uses the public URL and anon key. The historical importer additionally needs the service-role key. Never place a service-role key in a `NEXT_PUBLIC_` variable or print/commit it.
+The app uses the public URL, anon key, and one centralized canonical site origin. The historical importer additionally needs the service-role key. Never place a service-role key in a `NEXT_PUBLIC_` variable or print/commit it. Production deployment, DNS, Supabase Auth, and Resend SMTP instructions are in [`docs/production-deployment.md`](docs/production-deployment.md).
+
+## Production domain and authentication email
+
+`https://jimmygm.com` is the canonical production URL. Metadata, confirmation links, recovery links, and callback redirects all derive from `NEXT_PUBLIC_SITE_URL`; `www.jimmygm.com` is redirect-only. `/auth/callback` exchanges Supabase PKCE codes and accepts only internal return paths. `/auth` remains a compatibility redirect to the dedicated `/login` route.
+
+Supabase Auth owns confirmation and password-recovery tokens. Resend is configured only as Supabase Custom SMTP with the intended sender `Jim's Fantasy Helper <no-reply@jimmygm.com>`; the application has no Resend SDK or API key.
 
 ## Database and Supabase setup
 
@@ -189,7 +198,14 @@ production raw = confidence factor × (
   + 0.15 × scarcity bonus
 )
 
-raw value = production raw + games × (modest age context + modest depth-role context)
+opportunity confidence = established-production share
+  + speculative share × (draft-capital confidence × depth opportunity)
+
+opportunity-adjusted raw = production raw × opportunity confidence
+  - unproven opportunity cost
+
+raw value = opportunity-adjusted raw
+  + games × (gated age context + draft context + depth-role context)
 ```
 
 Elite and starter PPG are derived from the current position curve. Confidence uses the projection model's existing High/Medium/Low classification with deliberately small factors of 1.00/0.98/0.96. Expected games are currently the remaining portion of a 17-game season (`18 - projection week`), isolated for replacement when schedule/bye availability is added.
@@ -198,22 +214,25 @@ At the start of a season, proven players use a configurable recent-history prior
 
 Displayed value uses a monotonic softplus transformation around a generic historical raw reference. Signed raw scores are preserved, so a player just below replacement decays smoothly to a small positive value instead of falling off a zero cliff. The reference profile maps near 49; values above 50 enter a soft exponential tail that approaches 55 without a hard clamp. No player name or season is part of production math. Historical profiles such as 2019 Christian McCaffrey remain reporting-only calibration checks.
 
-Age/upside context is position-specific and deliberately small: RB decline arrives sooner than WR/TE decline, while quarterbacks retain a longer curve. It changes Player Value only, never projected PPG. Current depth roles are sourced from nflverse's dated ESPN depth charts, mapped to canonical players by GSIS ID, and applied as a moderate role-confidence signal. Missing depth data is neutral. A young RB2 retains a small opportunity-path signal; buried veterans and backup quarterbacks are discounted, with backup-QB context less punitive in Superflex.
+Age/upside context is position-specific and deliberately small: RB decline arrives sooner than WR/TE decline, while quarterbacks retain a longer curve. It changes Player Value only, never projected PPG. Youth is opportunity-gated rather than rewarded alone. Draft year/round/pick come from the official nflverse players release and join by GSIS ID. `draft_status` distinguishes drafted, confirmed UDFA, and unknown players; a null status means enrichment has not run and remains neutral. Current depth roles are sourced from nflverse's dated ESPN depth charts. For low-history players, draft investment and current depth access control how much confidence the value layer places in projection upside. Established production progressively protects veterans from transient depth labels. Missing depth/draft enrichment is neutral, and backup-QB opportunity is less punitive in Superflex.
 
 Depth charts and historical priors are optional enrichment. Their Supabase lookups use a four-second timeout, one transient retry, structured server warnings, and neutral fallbacks. A network failure therefore removes only the depth/prior contribution; synchronized roster ownership, manual Trade Finder selection, projections, and the remaining Player Value inputs continue independently. Required league and roster ownership failures remain explicit errors.
 
 League Overview batches the current projection pool, all league rosters, and all roster players. Rows show league-scored projected PPG, league-adjusted value, and position rank, and link to the existing `/players/[playerId]` detail route. Team projected PPG uses an exact bitmask lineup optimizer: each roster player can fill at most one eligible starter slot, and the combination with the highest projected PPG wins. Bench players count only when selected into that optimal lineup. Missing projections render as unavailable and produce a clearly marked partial lineup total.
 
-Player values are not duplicated into roster records; 613 projections are cheap to rescore and rank. Depth snapshots use migration `20260816080000_player_depth_charts.sql`. Refresh, validate, apply the migration, and import with:
+Player values are not duplicated into roster records. League pages hydrate roster ownership once, then batch only those canonical player IDs for the focused Player Value history view and depth roles. Depth snapshots use migration `20260816080000_player_depth_charts.sql`; draft fields and the focused history view use the new `20260817132025` and `20260817133546` migrations. Refresh, validate, apply the migrations, and import with:
 
 ```bash
 npm run data:depth-charts
 npm run data:depth-charts:import:dry-run
+npm run data:players
+npm run data:players:import:dry-run
 npx supabase db push
 python3 scripts/import_depth_charts.py
+python3 scripts/import_player_draft_capital.py
 ```
 
-The `/trades` route reuses synchronized roster ownership and league-scored values. Manual mode supports multi-player packages. Automatic mode searches 1-for-1 through 2-for-2 packages among the top 12 meaningful assets per team, prunes at a 20% value window, removes equivalent duplicates, and ranks results using value closeness, basic positional need, and optimal-lineup PPG impact. It is a decision aid, not an acceptance-probability model.
+The `/trades` route reuses synchronized roster ownership and league-scored values. Manual mode uses locally filtered, selectable roster rows and supports multi-player packages without a request per click. Automatic mode searches 1-for-1 through 2-for-2 packages among the top 12 meaningful assets per team. Packages are sorted and range-pruned at a 20% value window before expensive lineup analysis; only the best 80 preliminary candidates receive optimal-lineup scoring, equivalent packages are removed, and the top 20 render. It is a decision aid, not an acceptance-probability model. Run `npm run trade:benchmark` for the reproducible synthetic 10-team timing comparison.
 
 Run the reproducible historical/current calibration report with:
 

@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LeagueRoster } from "@/components/dashboard/league-roster";
+import { TeamSelector } from "@/components/dashboard/team-selector";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { selectLeagueTeam } from "@/lib/fantasy/roster-order";
@@ -129,33 +129,20 @@ export default async function LeaguePage({
           : "Not yet synced"}
       </p>
 
-      <nav
-        aria-label="League teams"
-        className="mt-5 flex [scrollbar-width:none] gap-2 overflow-x-auto pb-2"
-      >
-        {teams.map((team) => (
-          <Link
-            key={team.id}
-            href={`/dashboard/league/${league.id}?teamId=${team.id}`}
-            aria-current={selectedTeam?.id === team.id ? "page" : undefined}
-            className={`min-w-max rounded-full border px-3.5 py-2 text-sm font-bold transition ${selectedTeam?.id === team.id ? "border-cyan-300 bg-cyan-400/15 text-cyan-100" : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"}`}
-          >
-            <span>
-              {team.isMyTeam ? "My Team" : teamName(team)}
-              {team.isMyTeam && teamName(team) !== "My Team" ? (
-                <span className="ml-1 text-xs opacity-70">
-                  · {teamName(team)}
-                </span>
-              ) : null}
-            </span>
-            {analytics?.teamSummaries.get(team.id)?.projectedPpg != null && (
-              <span className="ml-2 text-xs text-cyan-300 tabular-nums">
-                {analytics.teamSummaries.get(team.id)!.projectedPpg!.toFixed(1)}
-              </span>
-            )}
-          </Link>
-        ))}
-      </nav>
+      <TeamSelector
+        items={teams.map((team) => ({
+          id: team.id,
+          href: `/dashboard/league/${league.id}?teamId=${team.id}`,
+          label: team.isMyTeam ? "My Team" : teamName(team),
+          detail:
+            team.isMyTeam && teamName(team) !== "My Team"
+              ? teamName(team)
+              : null,
+          projectedPpg:
+            analytics?.teamSummaries.get(team.id)?.projectedPpg ?? null,
+          selected: selectedTeam?.id === team.id,
+        }))}
+      />
 
       <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(17rem,1fr)]">
         <Card className="p-3 sm:p-4">

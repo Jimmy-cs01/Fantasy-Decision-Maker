@@ -43,7 +43,7 @@ export async function getLatestProjectionPool(
     let recordsQuery = db
       .from("player_projections")
       .select(
-        "player_id,season,week,projected_stats,residual_low,residual_high,confidence,players(id,full_name,position,sleeper_position,historical_position,team,headshot_url,sleeper_player_id,birth_date,rookie_season)",
+        "player_id,season,week,projected_stats,residual_low,residual_high,confidence,players(id,full_name,position,sleeper_position,historical_position,team,headshot_url,sleeper_player_id,birth_date,rookie_season,draft_year,draft_round,draft_pick,draft_status)",
       )
       .eq("season", latest.season)
       .eq("week", latest.week)
@@ -101,8 +101,10 @@ export function calculateValueContexts(
       });
       byPlayer.set(row.player_id, entries);
     }
+    const playerIds = new Set([...byPlayer.keys(), ...currentGames.keys()]);
     return new Map(
-      [...byPlayer].map(([playerId, entries]) => {
+      [...playerIds].map((playerId) => {
+        const entries = byPlayer.get(playerId) ?? [];
         const weight = entries.reduce(
           (total, entry) => total + entry.weight,
           0,
@@ -111,10 +113,12 @@ export function calculateValueContexts(
           playerId,
           {
             ppg:
-              entries.reduce(
-                (total, entry) => total + entry.ppg * entry.weight,
-                0,
-              ) / weight,
+              weight > 0
+                ? entries.reduce(
+                    (total, entry) => total + entry.ppg * entry.weight,
+                    0,
+                  ) / weight
+                : 0,
             games: entries.reduce((total, entry) => total + entry.games, 0),
             currentSeasonGames: currentGames.get(playerId) ?? 0,
           },
@@ -225,7 +229,7 @@ export async function getProjectionHistoryRows(
     label: "Projection history lookup failed",
     fallback: [] as PlayerSeasonRow[],
     metadata: {
-      source: "Supabase/player_season_stats",
+      source: "Supabase/player_value_season_history",
       season,
       playerCount: playerIds.length,
     },
@@ -233,7 +237,7 @@ export async function getProjectionHistoryRows(
       const rows: PlayerSeasonRow[] = [];
       for (let start = 0; start < playerIds.length; start += 500) {
         const { data, error } = await db
-          .from("player_season_stats")
+          .from("player_value_season_history")
           .select("*")
           .in("player_id", playerIds.slice(start, start + 500))
           .gte("season", season - 3)

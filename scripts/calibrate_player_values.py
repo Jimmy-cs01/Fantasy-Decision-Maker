@@ -26,6 +26,7 @@ IDENTITY_PATH = ROOT / "data/processed/player_identity.csv"
 HISTORICAL_PATH = ROOT / "data/processed/historical_weekly_player_stats.csv"
 OUTPUT_PATH = ROOT / "data/processed/player_value_calibration_report.json"
 DEPTH_PATH = ROOT / "data/processed/depth_chart_roles.csv"
+DRAFT_PATH = ROOT / "data/processed/player_draft_capital.csv"
 POSITIONS = ("QB", "RB", "WR", "TE")
 
 
@@ -122,6 +123,51 @@ def tier(amount: float) -> str:
     return next((label for threshold, label in thresholds if amount >= threshold), "Replacement / Waiver")
 
 
+def opportunity_context(row: pd.Series, profile: dict[str, float], games: float, calibration: dict, production_raw: float) -> tuple[float, dict]:
+    status = row.get("draft_status")
+    round_number = int(row.draft_round) if pd.notna(row.get("draft_round")) else None
+    position = str(row.position)
+    if pd.isna(status):
+        draft_confidence = 1.0
+    elif status == "unknown":
+        draft_confidence = 0.55
+    elif status == "undrafted":
+        draft_confidence = 0.1 if position == "TE" else 0.08 if position == "QB" else 0.07
+    elif not round_number:
+        draft_confidence = 0.7
+    else:
+        curves = {
+            "QB": [1, .72, .55, .42, .32, .24, .18],
+            "RB": [1, .9, .76, .55, .4, .28, .18],
+            "WR": [1, .85, .7, .52, .38, .25, .16],
+            "TE": [.95, .85, .74, .6, .45, .32, .22],
+        }
+        draft_confidence = curves[position][min(7, max(1, round_number)) - 1]
+    rank = int(row.depth_rank) if pd.notna(row.get("depth_rank")) else None
+    if not rank:
+        depth_factor = 1.0
+    elif position == "QB":
+        depth_factor = 1.0 if rank == 1 else max(.08, .32 / (rank - 1)) if profile["demand"] / 10 >= 1.5 else max(.02, .09 / (rank - 1))
+    else:
+        curves = {"RB": [1, .72, .32, .1, .05, .03], "WR": [.98, .9, .76, .42, .2, .1], "TE": [1, .65, .35, .18, .1, .06]}
+        depth_factor = curves[position][min(6, rank) - 1]
+    established = min(1.0, max(0.0, float(row.get("count", 0) if pd.notna(row.get("count", 0)) else 0) / 24))
+    speculative = .03 + .97 * draft_confidence * depth_factor
+    opportunity = min(1.0, max(.03, established + (1 - established) * speculative))
+    opportunity_cost = (1 - opportunity) * profile["replacement"] * games * calibration["weights"]["opportunityCost"]
+    adjusted = production_raw * opportunity - opportunity_cost if production_raw > 0 else production_raw
+    if position == "RB":
+        depth_context = .22 if rank == 1 else .15 if rank == 2 else max(-1, -.35 * (rank - 2)) if rank else 0
+    elif position == "WR": depth_context = .12 if rank and rank <= 3 else max(-.4, -.08 * (rank - 3)) if rank else 0
+    elif position == "TE": depth_context = .15 if rank == 1 else 0 if rank == 2 or not rank else max(-.35, -.1 * (rank - 2))
+    else: depth_context = .18 if rank == 1 else max(-.5, -.2 * (rank - 1)) if rank and profile["demand"] / 10 >= 1.5 else max(-1.25, -.8 * (rank - 1)) if rank else 0
+    draft_context = 0.0
+    if status == "undrafted": draft_context = -.22
+    elif status == "drafted" and round_number: draft_context = .18 if round_number == 1 else .12 if round_number == 2 else .06 if round_number == 3 else -.1 if round_number >= 6 else 0
+    draft_context *= 1 - established
+    return adjusted + games * (depth_context + draft_context), {"opportunity_confidence": opportunity, "draft_context": draft_context, "role_context": depth_context}
+
+
 def current_report(calibration: dict, identities: pd.DataFrame, projections_path: Path = PROJECTIONS_PATH, roster_positions: list[str] | None = None, teams: int | None = None) -> tuple[pd.DataFrame, dict]:
     frame = pd.read_csv(projections_path, dtype={"gsis_id": "string"})
     frame["player_id"] = frame.gsis_id
@@ -165,6 +211,12 @@ def current_report(calibration: dict, identities: pd.DataFrame, projections_path
     frame["ceiling"] = (frame["ceiling"] + shift).clip(lower=0)
     frame["confidence"] = frame.confidence.str.lower()
     frame = frame.merge(identities[["player_id", "player_name"]], on="player_id", how="left")
+    if DRAFT_PATH.exists():
+        draft = pd.read_csv(DRAFT_PATH, usecols=["gsis_id", "draft_round", "draft_pick", "draft_status"], dtype={"gsis_id": "string"})
+        frame = frame.merge(draft, left_on="player_id", right_on="gsis_id", how="left")
+    if DEPTH_PATH.exists():
+        depth = pd.read_csv(DEPTH_PATH, usecols=["gsis_id", "depth_position", "depth_rank"], dtype={"gsis_id": "string"})
+        frame = frame.merge(depth, left_on="player_id", right_on="gsis_id", how="left", suffixes=("", "_depth"))
     default = calibration["defaultLeague"]
     teams = teams or default["teams"]
     roster_positions = roster_positions or default["rosterPositions"]
@@ -172,8 +224,9 @@ def current_report(calibration: dict, identities: pd.DataFrame, projections_path
     rows = []
     for _, row in frame.iterrows():
         raw, vorp, ros = raw_value(row, replacement[row.position], 17, calibration)
-        amount = value(raw, calibration)
-        rows.append({"player_id": row.player_id, "name": row.player_name, "position": row.position, "ppg": round(row.ppg, 1), "prior_ppg": round(row.prior_ppg, 1) if pd.notna(row.prior_ppg) else None, "prior_weight": round(row.prior_weight, 3), "floor_ppg": round(row.floor, 1), "ceiling_ppg": round(row.ceiling, 1), "replacement_ppg": round(replacement[row.position]["replacement"], 1), "vorp_per_game": round(vorp, 1), "ros_vorp": round(ros, 1), "raw_value": round(raw, 3), "value": amount, "tier": tier(amount)})
+        adjusted_raw, context = opportunity_context(row, replacement[row.position], 17, calibration, raw)
+        amount = value(adjusted_raw, calibration)
+        rows.append({"player_id": row.player_id, "name": row.player_name, "position": row.position, "ppg": round(row.ppg, 1), "prior_ppg": round(row.prior_ppg, 1) if pd.notna(row.prior_ppg) else None, "prior_weight": round(row.prior_weight, 3), "floor_ppg": round(row.floor, 1), "ceiling_ppg": round(row.ceiling, 1), "replacement_ppg": round(replacement[row.position]["replacement"], 1), "vorp_per_game": round(vorp, 1), "ros_vorp": round(ros, 1), "raw_value": round(adjusted_raw, 3), "value": amount, "tier": tier(amount), "draft_status": row.get("draft_status"), "draft_round": int(row.draft_round) if pd.notna(row.get("draft_round")) else None, **context})
     result = pd.DataFrame(rows).sort_values(
         ["value", "ppg", "player_id"], ascending=[False, False, True]
     ).reset_index(drop=True)
@@ -206,24 +259,14 @@ def historical_report(calibration: dict, identities: pd.DataFrame) -> tuple[list
 
 
 def depth_context_examples(current: pd.DataFrame, calibration: dict) -> list[dict]:
-    if not DEPTH_PATH.exists():
+    if "depth_rank" not in current:
         return []
-    depth = pd.read_csv(DEPTH_PATH, dtype={"gsis_id": "string"})
-    joined = current.merge(depth[["gsis_id", "depth_position", "depth_rank", "is_starter"]], left_on="player_id", right_on="gsis_id", how="inner")
     candidates = pd.concat([
-        joined[joined.depth_rank.eq(1)].head(1),
-        joined[joined.depth_rank.eq(2)].head(1),
-        joined[joined.depth_rank.ge(3)].head(1),
+        current[current.depth_rank.eq(1)].head(1),
+        current[current.depth_rank.eq(2)].head(1),
+        current[current.depth_rank.ge(3)].head(1),
     ]).drop_duplicates("player_id")
-    examples = []
-    for _, row in candidates.iterrows():
-        adjustment = 0.0
-        if row.position == "QB": adjustment = 0.18 if row.depth_rank == 1 else max(-1.25, -0.8 * (row.depth_rank - 1))
-        elif row.position == "RB": adjustment = 0.22 if row.depth_rank == 1 else 0.0 if row.depth_rank == 2 else max(-0.55, -0.12 * (row.depth_rank - 2))
-        elif row.position == "WR": adjustment = 0.12 if row.depth_rank <= 3 else max(-0.4, -0.08 * (row.depth_rank - 3))
-        elif row.position == "TE": adjustment = 0.15 if row.depth_rank == 1 else 0.0 if row.depth_rank == 2 else max(-0.35, -0.1 * (row.depth_rank - 2))
-        examples.append({"name": row["name"], "position": row.position, "depth_role": f"{row.depth_position}{int(row.depth_rank)}", "base_value": row.value, "depth_adjusted_value": value(row.raw_value + adjustment * 17, calibration), "depth_context_ppg": adjustment})
-    return examples
+    return candidates[["name", "position", "depth_position", "depth_rank", "value", "opportunity_confidence", "draft_context", "role_context"]].to_dict("records")
 
 
 def main() -> None:
@@ -261,6 +304,13 @@ def main() -> None:
             "exactly_zero": int(current.value.eq(0).sum()), "above_40": int(current.value.gt(40).sum()),
             "above_50": int(current.value.gt(50).sum()),
         },
+        "draft_coverage": {
+            "fantasy_players": int(len(pd.read_csv(DRAFT_PATH).query("position in ['QB', 'RB', 'WR', 'TE']"))) if DRAFT_PATH.exists() else 0,
+            "known_drafted_or_udfa": int(pd.read_csv(DRAFT_PATH).query("position in ['QB', 'RB', 'WR', 'TE']").draft_status.isin(["drafted", "undrafted"]).sum()) if DRAFT_PATH.exists() else 0,
+            "current_projection_players": int(len(current)),
+            "current_projection_known": int(current.draft_status.isin(["drafted", "undrafted"]).sum()),
+        },
+        "frank_gore_jr": current[current.player_id.eq("00-0039471")].head(1).to_dict("records"),
         "current_top_20": current.head(20).to_dict("records"),
         "current_tier_counts": current.tier.value_counts().to_dict(),
         "current_sanity_samples": {

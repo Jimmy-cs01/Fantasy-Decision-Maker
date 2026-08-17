@@ -23,6 +23,8 @@ describe("league roster query contract", () => {
 
   it("renders league-scored values, optimal lineup PPG, and the shared player route", () => {
     expect(source).toContain("getLeagueRosterAnalytics");
+    expect(source).toContain("<TeamSelector");
+    expect(source).toContain("teamId=${team.id}");
     expect(source).toContain("selectedTeamProjection.projectedPpg.toFixed(1)");
     expect(service).toContain("optimizeProjectedLineup");
     expect(service).toContain("player_value");
