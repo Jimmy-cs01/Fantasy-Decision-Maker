@@ -1,4 +1,4 @@
-import { CMC_2019_CALIBRATION, VALUE_DISPLAY_CALIBRATION, VALUE_WEIGHTS } from "./config";
+import { VALUE_DISPLAY_CALIBRATION, VALUE_WEIGHTS } from "./config";
 import type { ProjectionConfidence } from "../projections/types";
 import type { PlayerValueResult, PositionReplacementProfile, ValuePlayerProjection } from "./types";
 
@@ -9,6 +9,7 @@ interface RawValueInput {
   expectedGames: number;
   profile: Pick<PositionReplacementProfile, "replacementPpg" | "starterPpg" | "elitePpg" | "scarcityDropoff">;
   confidence: ProjectionConfidence;
+  contextualPpg?: number;
 }
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value));
@@ -23,60 +24,89 @@ export function calculateRawPlayerValue(input: RawValueInput) {
   const eliteDenominator = Math.max(0.01, profile.elitePpg - profile.starterPpg);
   const eliteShare = clamp((medianPpg - profile.starterPpg) / eliteDenominator, 0, 1);
   const scarcityBonus = profile.scarcityDropoff * expectedGames * eliteShare;
-  const raw = (
+  const productionRaw = (
     rosVorp
     + VALUE_WEIGHTS.floorVorp * floorVorp
     + VALUE_WEIGHTS.upside * upside
     + VALUE_WEIGHTS.scarcity * scarcityBonus
   ) * VALUE_WEIGHTS.confidence[input.confidence];
-  return { rawValue: Math.max(0, raw), vorpPerGame, rosVorp };
+  return {
+    rawValue: productionRaw + (input.contextualPpg ?? 0) * expectedGames,
+    vorpPerGame,
+    rosVorp,
+  };
 }
 
-const CMC_PROFILE = {
-  replacementPpg: CMC_2019_CALIBRATION.replacementPpg,
-  starterPpg: CMC_2019_CALIBRATION.starterPpg,
-  elitePpg: CMC_2019_CALIBRATION.elitePpg,
-  scarcityDropoff: CMC_2019_CALIBRATION.elitePpg - CMC_2019_CALIBRATION.replacementPpg,
-};
-
-export const CMC_2019_RAW_VALUE = calculateRawPlayerValue({
-  medianPpg: CMC_2019_CALIBRATION.medianPpg,
-  floorPpg: CMC_2019_CALIBRATION.floorPpg,
-  ceilingPpg: CMC_2019_CALIBRATION.ceilingPpg,
-  expectedGames: CMC_2019_CALIBRATION.games,
-  profile: CMC_PROFILE,
-  confidence: CMC_2019_CALIBRATION.confidence,
-}).rawValue;
-
-export function historicalCmc2019AnchorValue() {
-  return normalizePlayerValue(CMC_2019_RAW_VALUE, true);
+function softplus(value: number) {
+  if (value > 30) return value;
+  if (value < -30) return Math.exp(value);
+  return Math.log1p(Math.exp(value));
 }
 
-export function normalizePlayerValue(rawValue: number, historicalCmcAnchor = false) {
-  if (historicalCmcAnchor) return 100;
-  const ratio = clamp(rawValue / CMC_2019_RAW_VALUE, 0, 1);
-  const calibrated = VALUE_DISPLAY_CALIBRATION.method === "power"
-    ? 100 * Math.pow(ratio, VALUE_DISPLAY_CALIBRATION.exponent)
-    : 100 * ratio;
-  return round(clamp(calibrated, 0, 99.9));
+/** Maps signed production onto a near-0-to-50 scale with a rare, soft 50-55 tail. */
+export function normalizePlayerValue(rawValue: number) {
+  const calibration = VALUE_DISPLAY_CALIBRATION;
+  const reference = softplus(calibration.referenceRawValue / calibration.temperature);
+  const base = calibration.referenceDisplayValue
+    * softplus(rawValue / calibration.temperature)
+    / reference;
+  if (base <= calibration.softTailStart) return round(Math.max(0, base));
+  const tail = calibration.softTailStart
+    + (calibration.softTailLimit - calibration.softTailStart)
+    * (1 - Math.exp(-(base - calibration.softTailStart) / calibration.softTailRate));
+  return round(tail);
 }
 
 export function playerValueTier(value: number) {
-  if (value >= 95) return "Historic / League-Breaking";
-  if (value >= 90) return "Elite Cornerstone";
-  if (value >= 80) return "Elite Fantasy Asset";
-  if (value >= 70) return "High-End Starter";
-  if (value >= 60) return "Strong Starter";
-  if (value >= 50) return "Solid Starter";
-  if (value >= 40) return "FLEX / Lower Starter";
-  if (value >= 30) return "Useful Depth";
-  if (value >= 20) return "Bench Value";
-  if (value >= 10) return "Fringe Roster";
+  if (value >= 50) return "Generational / Historic";
+  if (value >= 45) return "Elite Cornerstone";
+  if (value >= 38) return "Elite Fantasy Asset";
+  if (value >= 30) return "High-End Starter";
+  if (value >= 24) return "Strong Starter";
+  if (value >= 18) return "Solid Starter";
+  if (value >= 12) return "FLEX / Lower Starter";
+  if (value >= 7) return "Useful Depth";
+  if (value >= 3) return "Bench Value";
+  if (value >= 1) return "Fringe Roster";
   return "Replacement / Waiver";
 }
 
 export function expectedGamesRemaining(week: number, regularSeasonGames = 17) {
   return clamp(18 - week, 0, regularSeasonGames);
+}
+
+export function ageAtSeason(birthDate: string | null | undefined, season: number | undefined) {
+  if (!birthDate || !season) return null;
+  const born = new Date(birthDate + "T00:00:00Z");
+  if (Number.isNaN(born.valueOf())) return null;
+  let age = season - born.getUTCFullYear();
+  if (born.getUTCMonth() > 8 || (born.getUTCMonth() === 8 && born.getUTCDate() > 1)) age -= 1;
+  return age;
+}
+
+export function ageUpsidePpg(player: ValuePlayerProjection) {
+  const age = ageAtSeason(player.birthDate, player.season);
+  if (age === null) return 0;
+  if (player.position === "QB") return age <= 25 ? 0.12 : age >= 38 ? -0.18 : 0;
+  if (player.position === "RB") return age <= 23 ? 0.35 : age <= 25 ? 0.18 : age >= 30 ? -0.3 : age >= 28 ? -0.12 : 0;
+  if (player.position === "WR") return age <= 23 ? 0.28 : age <= 25 ? 0.14 : age >= 33 ? -0.2 : age >= 31 ? -0.08 : 0;
+  return age <= 24 ? 0.18 : age >= 34 ? -0.15 : age >= 32 ? -0.06 : 0;
+}
+
+export function depthOpportunityPpg(player: ValuePlayerProjection, profile: PositionReplacementProfile) {
+  const rank = player.depthRank;
+  if (!rank || rank < 1) return 0;
+  if (player.position === "QB") {
+    if (rank === 1) return 0.18;
+    return profile.demandPerTeam >= 1.5 ? Math.max(-0.5, -0.2 * (rank - 1)) : Math.max(-1.25, -0.8 * (rank - 1));
+  }
+  if (player.position === "RB") {
+    if (rank === 1) return 0.22;
+    if (rank === 2) return (ageAtSeason(player.birthDate, player.season) ?? 99) <= 25 ? 0.15 : 0;
+    return Math.max(-0.55, -0.12 * (rank - 2));
+  }
+  if (player.position === "WR") return rank <= 3 ? 0.12 : Math.max(-0.4, -0.08 * (rank - 3));
+  return rank === 1 ? 0.15 : rank === 2 ? 0 : Math.max(-0.35, -0.1 * (rank - 2));
 }
 
 function scenarioValue(ppg: number, expectedGames: number, profile: PositionReplacementProfile, confidence: ProjectionConfidence) {
@@ -91,6 +121,8 @@ function scenarioValue(ppg: number, expectedGames: number, profile: PositionRepl
 }
 
 export function calculatePlayerValue(player: ValuePlayerProjection, profile: PositionReplacementProfile, expectedGames: number): PlayerValueResult {
+  const ageAdjustment = ageUpsidePpg(player);
+  const depthAdjustment = depthOpportunityPpg(player, profile);
   const raw = calculateRawPlayerValue({
     medianPpg: player.projectedPpg,
     floorPpg: player.floorPpg,
@@ -98,6 +130,7 @@ export function calculatePlayerValue(player: ValuePlayerProjection, profile: Pos
     expectedGames,
     profile,
     confidence: player.confidence,
+    contextualPpg: ageAdjustment + depthAdjustment,
   });
   const value = normalizePlayerValue(raw.rawValue);
   const floorValue = scenarioValue(player.floorPpg, expectedGames, profile, player.confidence);
@@ -120,6 +153,9 @@ export function calculatePlayerValue(player: ValuePlayerProjection, profile: Pos
     expectedGamesRemaining: expectedGames,
     priorSeasonPpg: player.priorSeasonPpg ?? null,
     priorWeight: round(player.priorWeight ?? 0),
+    ageAdjustment: round(ageAdjustment),
+    depthAdjustment: round(depthAdjustment),
+    depthRole: player.depthPosition && player.depthRank ? player.depthPosition + player.depthRank : null,
     overallRank: 0,
     positionRank: 0,
   };

@@ -4,6 +4,16 @@ import type { ProjectedStatLine, ProjectionConfidence } from "../projections/typ
 import { VALUE_POSITIONS } from "./replacement";
 import type { FantasyPosition, ValuePlayerProjection } from "./types";
 
+export interface CurrentDepthRole {
+  playerId: string;
+  position: string;
+  depthPosition: string;
+  depthRank: number;
+  isStarter: boolean;
+  team: string;
+  sourceUpdatedAt: string;
+}
+
 export interface ValueProjectionRecord {
   player_id: string;
   season: number;
@@ -21,6 +31,8 @@ export interface ValueProjectionRecord {
     team: string | null;
     headshot_url: string | null;
     sleeper_player_id: string | null;
+    birth_date?: string | null;
+    rookie_season?: number | null;
   } | Array<{
     id: string;
     full_name: string;
@@ -30,6 +42,8 @@ export interface ValueProjectionRecord {
     team: string | null;
     headshot_url: string | null;
     sleeper_player_id: string | null;
+    birth_date?: string | null;
+    rookie_season?: number | null;
   }> | null;
 }
 
@@ -64,6 +78,7 @@ export function scoreProjectionPool(
   records: ValueProjectionRecord[],
   scoringSettings: Record<string, number>,
   priors: Map<string, ProjectionPrior> = new Map(),
+  depthRoles: Map<string, CurrentDepthRole> = new Map(),
 ) {
   return records.flatMap((record): ValuePlayerProjection[] => {
     const player = projectionIdentity(record);
@@ -72,8 +87,10 @@ export function scoreProjectionPool(
     const modelPpg = calculateProjectedFantasyPoints(record.projected_stats, scoringSettings, position);
     const stabilized = stabilizeProjection(modelPpg, priors.get(record.player_id));
     const shift = stabilized.ppg - modelPpg;
+    const depth = depthRoles.get(record.player_id);
     return [{
       playerId: record.player_id,
+      season: record.season,
       fullName: player.full_name,
       position,
       projectedPpg: stabilized.ppg,
@@ -83,6 +100,11 @@ export function scoreProjectionPool(
       projectedStats: record.projected_stats,
       priorSeasonPpg: stabilized.priorSeasonPpg,
       priorWeight: stabilized.priorWeight,
+      birthDate: player.birth_date ?? null,
+      rookieSeason: player.rookie_season ?? null,
+      depthPosition: depth?.depthPosition ?? null,
+      depthRank: depth?.depthRank ?? null,
+      depthStarter: depth?.isStarter ?? null,
     }];
   });
 }

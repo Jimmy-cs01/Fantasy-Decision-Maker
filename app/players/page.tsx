@@ -3,10 +3,13 @@ import { ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucid
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlayerLeaderboard } from "@/components/players/player-leaderboard";
+import { ProjectedPlayerLeaderboard } from "@/components/players/projected-player-leaderboard";
 import { PositionFilterNav } from "@/components/players/position-filter";
 import { PlayerSearch } from "@/components/players/player-search";
 import { parsePlayerFilters, positionColumns, POSITIONS, resolveScoringSelection, resolveSeason } from "@/lib/players/filters";
-import { getAvailableSeasons, getPlayerLeaders, getScoringLeagues } from "@/lib/players/queries";
+import { getAvailableSeasons, getPlayerLeaders, getProjectedPlayerLeaders, getScoringLeagues } from "@/lib/players/queries";
+import { DEFAULT_VALUE_LEAGUE } from "@/lib/player-values/config";
+import type { ProjectionLeaderSort } from "@/lib/players/types";
 
 const first = (input: string | string[] | undefined) => Array.isArray(input) ? input[0] : input;
 
@@ -17,7 +20,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   let scoringLeagues: Awaited<ReturnType<typeof getScoringLeagues>> = [];
   let error = "";
   try {
-    seasons = await getAvailableSeasons(filters.seasonType);
+    seasons = [...new Set([2026, ...await getAvailableSeasons(filters.seasonType)])].sort((left, right) => right - left);
   } catch (cause) {
     console.error(cause);
     error = "Historical statistics are unavailable. Apply the latest player-stat migration and verify the nflverse import.";
@@ -31,8 +34,12 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   const season = resolveSeason(requestedSeason, seasons);
   const selectedLeague = scoringLeagues.find((league) => league.id === filters.leagueId) ?? scoringLeagues[0] ?? null;
   const scoring = resolveScoringSelection(first(params.scoring), Boolean(selectedLeague));
+  const mode = season === 2026 && first(params.mode) !== "actual" ? "projected" : "actual";
+  const requestedProjectionSort = first(params.sort) as ProjectionLeaderSort | undefined;
+  const projectionSort: ProjectionLeaderSort = ["player_value", "value_rank", "projected_ppg", "projected_fpts"].includes(requestedProjectionSort ?? "") ? requestedProjectionSort! : "player_value";
   let result = { rows: [], total: 0, pageSize: 50 } as Awaited<ReturnType<typeof getPlayerLeaders>>;
-  if (season && !error) {
+  let projectionResult = { rows: [], total: 0, pageSize: 50, season: null } as Awaited<ReturnType<typeof getProjectedPlayerLeaders>>;
+  if (season && !error && mode === "actual") {
     try {
       result = await getPlayerLeaders({ season, ...filters, scoring, scoringSettings: scoring === "league" ? selectedLeague?.scoring_settings : undefined });
     } catch (cause) {
@@ -40,12 +47,22 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       error = "The leaderboard query failed. Apply the latest nflverse migration before using the stat explorer.";
     }
   }
+  if (season === 2026 && !error && mode === "projected") {
+    const scoringSettings = scoring === "league" ? selectedLeague?.scoring_settings ?? { rec: 1 }
+      : scoring === "ppr" ? { rec: 1 } : scoring === "half_ppr" ? { rec: 0.5 } : { rec: 0 };
+    const rosterPositions = selectedLeague?.roster_positions ?? DEFAULT_VALUE_LEAGUE.rosterPositions;
+    projectionResult = await getProjectedPlayerLeaders({
+      position: filters.position, scoring, scoringSettings, sort: projectionSort, page: filters.page,
+      leagueConfig: { teams: Number(selectedLeague?.total_rosters ?? DEFAULT_VALUE_LEAGUE.teams), rosterPositions, scoringSettings },
+    });
+  }
   const columns = positionColumns(filters.position, scoring);
-  const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
+  const activeResult = mode === "projected" ? projectionResult : result;
+  const totalPages = Math.max(1, Math.ceil(activeResult.total / activeResult.pageSize));
   const href = (changes: Record<string, string | number>) => {
     const query = new URLSearchParams({
       season: String(season ?? ""), scoring, position: filters.position,
-      seasonType: filters.seasonType, sort: filters.sort, view: filters.view,
+      seasonType: filters.seasonType, sort: mode === "projected" ? projectionSort : filters.sort, view: filters.view, mode,
       page: String(filters.page),
       ...(selectedLeague ? { leagueId: selectedLeague.id } : {}),
       ...Object.fromEntries(Object.entries(changes).map(([key, item]) => [key, String(item)])),
@@ -72,7 +89,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <span className="hidden text-sm font-black uppercase tracking-wider text-cyan-300 sm:inline">Season Stats {season ?? "—"}</span>
+          <span className="hidden text-sm font-black uppercase tracking-wider text-cyan-300 sm:inline">{mode === "projected" ? "Projected" : "Season Stats"} {season ?? "—"}</span>
           <details className="group relative">
             <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-bold text-slate-200 transition hover:border-cyan-400/60 hover:text-cyan-200 [&::-webkit-details-marker]:hidden">
               <SlidersHorizontal aria-hidden="true" size={16} /><span className="whitespace-nowrap sm:hidden">{season ?? "—"} {filters.seasonType} · {scoring === "league" ? "League" : scoring.replace("_", " ").toUpperCase()}</span><span className="hidden sm:inline">Grid settings</span><ChevronDown aria-hidden="true" size={14} className="hidden transition group-open:rotate-180 sm:block" />
@@ -103,21 +120,23 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         </div>
       </div>
 
-      <div className="mt-3 sm:mt-4"><PositionFilterNav selected={filters.position} items={POSITIONS.map((position) => ({ position, href: href({ position, sort: "fantasy_points", view: "leaders", page: 1 }) }))} /></div>
+      {season === 2026 && <nav aria-label="2026 data mode" className="mt-3 inline-flex rounded-xl bg-slate-900 p-1 text-xs font-black"><Link href={href({ mode: "projected", sort: "player_value", page: 1 })} className={`rounded-lg px-3 py-2 ${mode === "projected" ? "bg-cyan-400 text-slate-950" : "text-slate-400"}`}>Projected</Link><Link href={href({ mode: "actual", sort: "fantasy_points", page: 1 })} className={`rounded-lg px-3 py-2 ${mode === "actual" ? "bg-cyan-400 text-slate-950" : "text-slate-400"}`}>Season Stats</Link></nav>}
+      <div className="mt-3 sm:mt-4"><PositionFilterNav selected={filters.position} items={POSITIONS.map((position) => ({ position, href: href({ position, sort: mode === "projected" ? "player_value" : "fantasy_points", view: "leaders", page: 1 }) }))} /></div>
 
       <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
-        <p>{season ? `${result.total.toLocaleString()} ${filters.position === "ALL" ? "fantasy players" : filters.position === "FLEX" ? "flex players" : `${filters.position}s`}` : "No season available"} · {filters.seasonType} · {scoring === "league" ? `${selectedLeague?.name} scoring` : scoring.replace("_", " ").toUpperCase()}</p>
+        <p>{season ? `${activeResult.total.toLocaleString()} ${filters.position === "ALL" ? "fantasy players" : filters.position === "FLEX" ? "flex players" : `${filters.position}s`}` : "No season available"} · {mode === "projected" ? "PROJECTED" : filters.seasonType} · {scoring === "league" ? `${selectedLeague?.name} scoring` : scoring.replace("_", " ").toUpperCase()}</p>
         <p className="shrink-0 sm:hidden">Swipe stats →</p>
       </div>
     </section>
 
     <div className="mt-3">
       {error ? <Card className="text-center"><h2 className="font-bold">Player data unavailable</h2><p className="mt-2 text-slate-400">{error}</p></Card>
+        : mode === "projected" && projectionResult.rows.length ? <ProjectedPlayerLeaderboard rows={projectionResult.rows} activeSort={projectionSort} leagueId={selectedLeague?.id} buildHref={href} />
         : result.rows.length && season ? <PlayerLeaderboard rows={result.rows} columns={columns} scoring={scoring} leagueId={selectedLeague?.id} activeSort={filters.sort} season={season} seasonType={filters.seasonType} page={filters.page} pageSize={result.pageSize} buildHref={href} />
-          : <Card className="text-center"><h2 className="font-bold">No player statistics found</h2><p className="mt-2 text-slate-400">Try another season, season type, scoring format, or position.</p></Card>}
+          : <Card className="text-center"><h2 className="font-bold">No {mode === "projected" ? "projections" : "player statistics"} found</h2><p className="mt-2 text-slate-400">{season === 2026 && mode === "actual" ? "The 2026 regular season has not produced nflverse rows yet. This view will populate after the weekly import." : "Try another season, season type, scoring format, or position."}</p></Card>}
     </div>
 
-    {!error && result.total > result.pageSize && <nav aria-label="Leaderboard pagination" className="mt-4 flex items-center justify-between">
+    {!error && activeResult.total > activeResult.pageSize && <nav aria-label="Leaderboard pagination" className="mt-4 flex items-center justify-between">
       <Link aria-disabled={filters.page <= 1} className={`flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-bold ${filters.page <= 1 ? "pointer-events-none text-slate-600" : "text-cyan-300 hover:bg-slate-900"}`} href={href({ page: filters.page - 1 })}><ChevronLeft size={16} /> Previous</Link>
       <span className="text-xs font-semibold text-slate-400">Page {filters.page} of {totalPages}</span>
       <Link aria-disabled={filters.page >= totalPages} className={`flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-bold ${filters.page >= totalPages ? "pointer-events-none text-slate-600" : "text-cyan-300 hover:bg-slate-900"}`} href={href({ page: filters.page + 1 })}>Next <ChevronRight size={16} /></Link>

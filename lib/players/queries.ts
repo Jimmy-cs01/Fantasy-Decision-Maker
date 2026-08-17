@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { withLeagueScoring, type SleeperScoringSettings } from "@/lib/fantasy/league-scoring";
 import { FANTASY_POSITIONS, scoringSortColumn } from "./filters";
 import type { LeaderSort, PlayerSeasonRow, PositionFilter, ScoringFormat, ScoringLeague, SeasonType } from "./types";
+import type { ProjectedPlayerLeaderRow, ProjectionLeaderSort } from "./types";
+import { calculateValueContexts, getCurrentDepthRoles, getLatestProjectionPool, getProjectionHistoryRows } from "@/lib/player-values/service";
+import { projectionIdentity } from "@/lib/player-values/projections";
+import type { ValueLeagueConfig } from "@/lib/player-values/types";
 
 async function attachHeadshots(db: Awaited<ReturnType<typeof createClient>>, rows: PlayerSeasonRow[]) {
   if (!rows.length) return rows;
@@ -18,12 +22,65 @@ export async function getScoringLeagues(): Promise<ScoringLeague[]> {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return [];
   const { data, error } = await db.from("leagues")
-    .select("id,name,season,scoring_settings")
+    .select("id,name,season,scoring_settings,total_rosters,roster_positions")
     .eq("owner_id", user.id)
     .not("last_synced_at", "is", null)
     .order("last_synced_at", { ascending: false });
   if (error) throw new Error(`Unable to load league scoring settings: ${error.message}`);
   return (data ?? []).filter((league) => Object.keys(league.scoring_settings ?? {}).length > 0) as ScoringLeague[];
+}
+
+export async function getProjectedPlayerLeaders(options: {
+  position: PositionFilter;
+  scoring: ScoringFormat;
+  scoringSettings?: SleeperScoringSettings;
+  leagueConfig?: ValueLeagueConfig;
+  sort: ProjectionLeaderSort;
+  page: number;
+}) {
+  const db = await createClient();
+  const latest = await getLatestProjectionPool(db);
+  const pageSize = 50;
+  if (!latest) return { rows: [] as ProjectedPlayerLeaderRow[], total: 0, pageSize, season: null };
+  const playerIds = latest.records.map((record) => record.player_id);
+  const [history, depthRoles] = await Promise.all([
+    getProjectionHistoryRows(db, playerIds, latest.season),
+    getCurrentDepthRoles(db, playerIds, latest.season),
+  ]);
+  const contexts = calculateValueContexts(latest.records, latest.week, options.leagueConfig, history, depthRoles);
+  const records = new Map(latest.records.map((record) => [record.player_id, record]));
+  let rows = [...contexts.byPlayerId.values()].flatMap((context): ProjectedPlayerLeaderRow[] => {
+    const value = context.league ?? context.general;
+    const record = records.get(value.playerId);
+    const identity = record ? projectionIdentity(record) : null;
+    if (!identity) return [];
+    return [{
+      player_id: value.playerId,
+      full_name: value.fullName,
+      position: value.position,
+      team: identity.team,
+      headshot_url: identity.headshot_url,
+      projected_ppg: value.projectedPpg,
+      projected_fpts: Math.round(value.projectedPpg * value.expectedGamesRemaining * 10) / 10,
+      player_value: value.value,
+      overall_rank: value.overallRank,
+      position_rank: value.positionRank,
+      depth_role: value.depthRole,
+      projected_stats: record?.projected_stats ?? {},
+    }];
+  });
+  rows = rows.filter((row) => options.position === "ALL"
+    ? FANTASY_POSITIONS.includes(row.position as typeof FANTASY_POSITIONS[number])
+    : options.position === "FLEX" ? ["RB", "WR", "TE"].includes(row.position) : row.position === options.position);
+  const key: Record<ProjectionLeaderSort, keyof ProjectedPlayerLeaderRow> = {
+    player_value: "player_value", value_rank: "overall_rank", projected_ppg: "projected_ppg", projected_fpts: "projected_fpts",
+  };
+  rows.sort((left, right) => options.sort === "value_rank"
+    ? left.overall_rank - right.overall_rank
+    : Number(right[key[options.sort]]) - Number(left[key[options.sort]]) || left.full_name.localeCompare(right.full_name));
+  const total = rows.length;
+  const start = (options.page - 1) * pageSize;
+  return { rows: rows.slice(start, start + pageSize), total, pageSize, season: latest.season };
 }
 
 export async function getAvailableSeasons(seasonType: SeasonType = "REG") {

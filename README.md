@@ -106,7 +106,7 @@ The importer requires the processed data to begin in 2012 and validates its cont
 
 Authenticated users can open `/players` for database-backed historical leaderboards and `/players/[playerId]` for season summaries and weekly game logs. Filters use shareable query parameters and include:
 
-- Every successfully imported season, currently 2012–2025
+- Every successfully imported season, currently 2012–2025, plus a separate 2026 projected/actual mode
 - Synced Sleeper league scoring by default when a league is selected, plus Standard, Half PPR, and PPR fallbacks
 - QB, RB, WR, TE, and FLEX; FLEX means RB + WR + TE and excludes QB
 - Regular season by default, with postseason kept separate
@@ -165,13 +165,13 @@ The database stores projected football stats, not only a universal PPR number. S
 
 `OddsProvider` is provider- and sportsbook-neutral, and the new `odds_games` / `player_props` tables can retain timestamped market snapshots. The no-op provider keeps local development free. No sportsbook is scraped and no paid API is required. When historical odds become available, statistical/market blend weights should be learned by chronological backtesting rather than hardcoded.
 
-The 2026 schedule/opponents are now automatic. Current roster/player availability, injuries, depth charts, newly completed 2026 nflverse weeks, odds, and player props remain future inputs.
+The 2026 schedule/opponents are automatic, and current nflverse/ESPN depth roles can be refreshed independently. Injuries, newly completed 2026 nflverse weeks, odds, and player props remain future inputs.
 
 ## Player Value and team strength
 
-Player Value is a deterministic 0–100 layer over the existing football-stat projections. It never trains or stores a second projection. The general value uses a documented 10-team, 1QB/2RB/2WR/1TE/2FLEX Half-PPR league; a synced league is rescored from the same projected stat line using its supported Sleeper rules and actual roster positions.
+Player Value is a deterministic, interpretable near-0-to-50 layer over the existing football-stat projections. Fifty is a soft historical-level reference, not a cap; the transform permits a rare, controlled tail toward 55. It never trains or stores a second projection. The general value uses a documented 10-team, 1QB/2RB/2WR/1TE/2FLEX/6-bench Half-PPR league; a synced league is rescored from the same projected stat line using its supported Sleeper rules and actual roster positions.
 
-Replacement demand is calculated from the projected pool. Every league-wide fixed starter slot is filled first. Constrained FLEX slots and then broader FLEX/SUPER_FLEX slots are assigned to the highest projected remaining eligible player. Replacement PPG is the first projected player outside that position's resulting starter demand. This makes team count, multiple FLEX slots, and Superflex change replacement levels without static position multipliers. Bench depth is intentionally not part of V1 replacement demand.
+Replacement demand is calculated from the projected pool. Every league-wide fixed starter slot is filled first. Constrained FLEX slots and then broader FLEX/SUPER_FLEX slots are assigned to the highest projected remaining eligible player. Bench slots extend the roster boundary proportionally to each position's starter demand, so 1QB benches do not fill with quarterbacks merely because QB raw scoring is higher. Replacement PPG is the first player outside that position's complete roster boundary. This makes team count, bench depth, multiple FLEX slots, and Superflex change replacement levels without static position multipliers.
 
 The raw formula is:
 
@@ -182,23 +182,38 @@ floor VORP      = max(0, floor PPG - replacement PPG) × games
 upside          = max(0, ceiling PPG - median PPG) × games
 scarcity bonus  = (elite PPG - replacement PPG) × games × elite share
 
-raw value = confidence factor × (
+production raw = confidence factor × (
   ROS VORP
   + 0.10 × floor VORP
   + 0.20 × upside
   + 0.15 × scarcity bonus
 )
+
+raw value = production raw + games × (modest age context + modest depth-role context)
 ```
 
 Elite and starter PPG are derived from the current position curve. Confidence uses the projection model's existing High/Medium/Low classification with deliberately small factors of 1.00/0.98/0.96. Expected games are currently the remaining portion of a 17-game season (`18 - projection week`), isolated for replacement when schedule/bye availability is added.
 
 At the start of a season, proven players use a configurable recent-history prior: 60% of the prior season, 30% of two seasons ago, and 10% of three seasons ago. A veteran with at least four historical games receives 20% prior signal before Week 1; that influence decays linearly with current-season games and reaches zero after eight games. The 20% starting weight was selected from the chronological 2024–2025 Weeks 1–4 backtest; larger 40–55% blends were less accurate. Rookies and players without enough history stay projection-only. The same blend is rescored using the selected league's supported Sleeper settings.
 
-The permanent scale fixture in [`lib/player-values/calibration.json`](lib/player-values/calibration.json) derives the benchmark from 2019 Christian McCaffrey's season and the 2019 default-league RB replacement curve. His raw benchmark is 315.228 and is exactly 100. Displayed value uses the monotonic historical calibration `100 × (raw / CMC raw)^0.40`, clamped to 0–99.9 for every non-anchor player. This expands meaningful starter/FLEX differences without changing rank order or letting a current player move the benchmark.
+Displayed value uses a monotonic softplus transformation around a generic historical raw reference. Signed raw scores are preserved, so a player just below replacement decays smoothly to a small positive value instead of falling off a zero cliff. The reference profile maps near 49; values above 50 enter a soft exponential tail that approaches 55 without a hard clamp. No player name or season is part of production math. Historical profiles such as 2019 Christian McCaffrey remain reporting-only calibration checks.
+
+Age/upside context is position-specific and deliberately small: RB decline arrives sooner than WR/TE decline, while quarterbacks retain a longer curve. It changes Player Value only, never projected PPG. Current depth roles are sourced from nflverse's dated ESPN depth charts, mapped to canonical players by GSIS ID, and applied as a moderate role-confidence signal. Missing depth data is neutral. A young RB2 retains a small opportunity-path signal; buried veterans and backup quarterbacks are discounted, with backup-QB context less punitive in Superflex.
+
+Depth charts and historical priors are optional enrichment. Their Supabase lookups use a four-second timeout, one transient retry, structured server warnings, and neutral fallbacks. A network failure therefore removes only the depth/prior contribution; synchronized roster ownership, manual Trade Finder selection, projections, and the remaining Player Value inputs continue independently. Required league and roster ownership failures remain explicit errors.
 
 League Overview batches the current projection pool, all league rosters, and all roster players. Rows show league-scored projected PPG, league-adjusted value, and position rank, and link to the existing `/players/[playerId]` detail route. Team projected PPG uses an exact bitmask lineup optimizer: each roster player can fill at most one eligible starter slot, and the combination with the highest projected PPG wins. Bench players count only when selected into that optimal lineup. Missing projections render as unavailable and produce a clearly marked partial lineup total.
 
-No Player Value cache or migration is needed for V1; 613 projections are cheap to rescore and rank, and avoiding persisted league copies prevents stale values. The future trade analyzer can consume general/league value, ranks, VORP, ROS VORP, distribution, and confidence through `getPlayerValue(playerId, leagueId?)` or `/api/player-values/[playerId]`.
+Player values are not duplicated into roster records; 613 projections are cheap to rescore and rank. Depth snapshots use migration `20260816080000_player_depth_charts.sql`. Refresh, validate, apply the migration, and import with:
+
+```bash
+npm run data:depth-charts
+npm run data:depth-charts:import:dry-run
+npx supabase db push
+python3 scripts/import_depth_charts.py
+```
+
+The `/trades` route reuses synchronized roster ownership and league-scored values. Manual mode supports multi-player packages. Automatic mode searches 1-for-1 through 2-for-2 packages among the top 12 meaningful assets per team, prunes at a 20% value window, removes equivalent duplicates, and ranks results using value closeness, basic positional need, and optimal-lineup PPG impact. It is a decision aid, not an acceptance-probability model.
 
 Run the reproducible historical/current calibration report with:
 
@@ -206,7 +221,7 @@ Run the reproducible historical/current calibration report with:
 npm run value:calibrate
 ```
 
-This writes the ignored `data/processed/player_value_calibration_report.json`. A candidate model can be generated to a separate output and passed to `scripts/calibrate_player_values.py --projections ...` before any import. No projection or Player Value migration is required for V2; schedule, feature, model, projection, and calibration artifacts remain reproducible and ignored.
+This writes the ignored `data/processed/player_value_calibration_report.json`, including min/median/p75/p90/p95/max, exact-zero count, and upper-tail counts. A candidate model can be generated to a separate output and passed to `scripts/calibrate_player_values.py --projections ...` before any import. Schedule, feature, model, projection, and calibration artifacts remain reproducible and ignored.
 
 ### Historical provider transition
 
@@ -228,7 +243,7 @@ Manual mapping corrections are stored in [`data/player_mapping_overrides.csv`](d
 
 - NFL weekly statistics ingestion
 - Custom player value metric
-- Trade analyzer and trade finder
+- Deeper trade analysis, draft-pick support, and acceptance modeling
 - Waiver wire and start/sit recommendations
 - Positional scarcity and player trend analysis
 - League-specific player values

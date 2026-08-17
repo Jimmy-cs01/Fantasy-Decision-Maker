@@ -25,6 +25,7 @@ PROJECTIONS_PATH = ROOT / "data/processed/player_projections.csv"
 IDENTITY_PATH = ROOT / "data/processed/player_identity.csv"
 HISTORICAL_PATH = ROOT / "data/processed/historical_weekly_player_stats.csv"
 OUTPUT_PATH = ROOT / "data/processed/player_value_calibration_report.json"
+DEPTH_PATH = ROOT / "data/processed/depth_chart_roles.csv"
 POSITIONS = ("QB", "RB", "WR", "TE")
 
 
@@ -63,6 +64,16 @@ def profiles(frame: pd.DataFrame, teams: int, roster_positions: list[str]) -> di
         row = candidate.iloc[0]
         used.add(row.player_id)
         demand[row.position] += 1
+    bench_slots = sum(slot.strip().upper() in {"BN", "BENCH"} for slot in roster_positions)
+    bench_demand = bench_slots * teams
+    starter_total = max(1, sum(demand.values()))
+    quotas = {position: bench_demand * demand[position] / starter_total for position in POSITIONS}
+    allocations = {position: int(np.floor(quota)) for position, quota in quotas.items()}
+    remaining = bench_demand - sum(allocations.values())
+    for position in sorted(POSITIONS, key=lambda item: (-(quotas[item] - allocations[item]), item))[:remaining]:
+        allocations[position] += 1
+    for position in POSITIONS:
+        demand[position] += allocations[position]
     output = {}
     for position in POSITIONS:
         players = frame[frame.position.eq(position)].sort_values(["ppg", "player_id"], ascending=[False, True]).reset_index(drop=True)
@@ -91,30 +102,27 @@ def raw_value(row: pd.Series, profile: dict[str, float], games: float, calibrati
     elite_share = min(1.0, max(0.0, (float(row.ppg) - profile["starter"]) / denominator))
     scarcity = profile["scarcity"] * games * elite_share
     confidence = weights["confidence"][str(row.confidence).lower()]
-    raw = max(0.0, (ros_vorp + weights["floorVorp"] * floor_vorp + weights["upside"] * upside + weights["scarcity"] * scarcity) * confidence)
+    raw = (ros_vorp + weights["floorVorp"] * floor_vorp + weights["upside"] * upside + weights["scarcity"] * scarcity) * confidence
     return raw, vorp, ros_vorp
 
 
-def cmc_raw(calibration: dict) -> float:
-    cmc = calibration["cmc2019"]
-    row = pd.Series({"ppg": cmc["medianPpg"], "floor": cmc["floorPpg"], "ceiling": cmc["ceilingPpg"], "confidence": cmc["confidence"]})
-    profile = {"replacement": cmc["replacementPpg"], "starter": cmc["starterPpg"], "elite": cmc["elitePpg"], "scarcity": cmc["elitePpg"] - cmc["replacementPpg"]}
-    return raw_value(row, profile, cmc["games"], calibration)[0]
-
-
-def value(raw: float, benchmark: float, anchor: bool = False, exponent: float = 0.4) -> float:
-    if anchor:
-        return 100.0
-    ratio = min(1.0, max(0.0, raw / benchmark))
-    return round(min(99.9, 100 * ratio ** exponent), 1)
+def value(raw: float, calibration: dict) -> float:
+    display = calibration["displayCalibration"]
+    softplus = lambda item: item if item > 30 else np.exp(item) if item < -30 else np.log1p(np.exp(item))
+    reference = softplus(display["referenceRawValue"] / display["temperature"])
+    base = display["referenceDisplayValue"] * softplus(raw / display["temperature"]) / reference
+    if base <= display["softTailStart"]:
+        return round(max(0.0, base), 1)
+    tail = display["softTailStart"] + (display["softTailLimit"] - display["softTailStart"]) * (1 - np.exp(-(base - display["softTailStart"]) / display["softTailRate"]))
+    return round(float(tail), 1)
 
 
 def tier(amount: float) -> str:
-    thresholds = [(95, "Historic / League-Breaking"), (90, "Elite Cornerstone"), (80, "Elite Fantasy Asset"), (70, "High-End Starter"), (60, "Strong Starter"), (50, "Solid Starter"), (40, "FLEX / Lower Starter"), (30, "Useful Depth"), (20, "Bench Value"), (10, "Fringe Roster")]
+    thresholds = [(50, "Generational / Historic"), (45, "Elite Cornerstone"), (38, "Elite Fantasy Asset"), (30, "High-End Starter"), (24, "Strong Starter"), (18, "Solid Starter"), (12, "FLEX / Lower Starter"), (7, "Useful Depth"), (3, "Bench Value"), (1, "Fringe Roster")]
     return next((label for threshold, label in thresholds if amount >= threshold), "Replacement / Waiver")
 
 
-def current_report(calibration: dict, identities: pd.DataFrame, benchmark: float, projections_path: Path = PROJECTIONS_PATH, roster_positions: list[str] | None = None, teams: int | None = None) -> tuple[pd.DataFrame, dict]:
+def current_report(calibration: dict, identities: pd.DataFrame, projections_path: Path = PROJECTIONS_PATH, roster_positions: list[str] | None = None, teams: int | None = None) -> tuple[pd.DataFrame, dict]:
     frame = pd.read_csv(projections_path, dtype={"gsis_id": "string"})
     frame["player_id"] = frame.gsis_id
     frame["position"] = frame.position.str.upper()
@@ -164,8 +172,8 @@ def current_report(calibration: dict, identities: pd.DataFrame, benchmark: float
     rows = []
     for _, row in frame.iterrows():
         raw, vorp, ros = raw_value(row, replacement[row.position], 17, calibration)
-        amount = value(raw, benchmark, exponent=calibration["displayCalibration"]["exponent"])
-        rows.append({"player_id": row.player_id, "name": row.player_name, "position": row.position, "ppg": round(row.ppg, 1), "prior_ppg": round(row.prior_ppg, 1) if pd.notna(row.prior_ppg) else None, "prior_weight": round(row.prior_weight, 3), "floor_ppg": round(row.floor, 1), "ceiling_ppg": round(row.ceiling, 1), "replacement_ppg": round(replacement[row.position]["replacement"], 1), "vorp_per_game": round(vorp, 1), "ros_vorp": round(ros, 1), "value": amount, "tier": tier(amount)})
+        amount = value(raw, calibration)
+        rows.append({"player_id": row.player_id, "name": row.player_name, "position": row.position, "ppg": round(row.ppg, 1), "prior_ppg": round(row.prior_ppg, 1) if pd.notna(row.prior_ppg) else None, "prior_weight": round(row.prior_weight, 3), "floor_ppg": round(row.floor, 1), "ceiling_ppg": round(row.ceiling, 1), "replacement_ppg": round(replacement[row.position]["replacement"], 1), "vorp_per_game": round(vorp, 1), "ros_vorp": round(ros, 1), "raw_value": round(raw, 3), "value": amount, "tier": tier(amount)})
     result = pd.DataFrame(rows).sort_values(
         ["value", "ppg", "player_id"], ascending=[False, False, True]
     ).reset_index(drop=True)
@@ -174,7 +182,7 @@ def current_report(calibration: dict, identities: pd.DataFrame, benchmark: float
     return result, replacement
 
 
-def historical_report(calibration: dict, identities: pd.DataFrame, benchmark: float) -> tuple[list[dict], dict, pd.DataFrame]:
+def historical_report(calibration: dict, identities: pd.DataFrame) -> tuple[list[dict], pd.DataFrame]:
     usecols = ["player_id", "season", "week", "season_type", "historical_position", "fantasy_points_half_ppr"]
     weekly = pd.read_csv(HISTORICAL_PATH, usecols=usecols, dtype={"player_id": "string"})
     weekly = weekly[weekly.season_type.eq("REG") & weekly.historical_position.isin(POSITIONS)]
@@ -186,19 +194,36 @@ def historical_report(calibration: dict, identities: pd.DataFrame, benchmark: fl
     seasons = seasons.merge(identities[["player_id", "player_name"]], on="player_id", how="left")
     results = []
     default = calibration["defaultLeague"]
-    cmc_profile = None
     for season, season_frame in seasons.groupby("season"):
         eligible = season_frame[season_frame.games.ge(4)]
         replacement = profiles(eligible, default["teams"], default["rosterPositions"])
-        if season == calibration["cmc2019"]["season"]:
-            cmc_profile = replacement["RB"]
         for _, row in eligible.iterrows():
             raw, _, _ = raw_value(row, replacement[row.position], float(row.games), calibration)
-            anchor = row.player_id == calibration["cmc2019"]["playerId"] and season == calibration["cmc2019"]["season"]
-            results.append({"player_id": row.player_id, "name": row.player_name, "position": row.position, "season": int(season), "ppg": round(row.ppg, 1), "value": value(raw, benchmark, anchor, calibration["displayCalibration"]["exponent"])})
+            results.append({"player_id": row.player_id, "name": row.player_name, "position": row.position, "season": int(season), "ppg": round(row.ppg, 1), "value": value(raw, calibration)})
     historical = pd.DataFrame(results)
     examples = [historical[historical.position.eq(position)].sort_values(["value", "ppg"], ascending=False).iloc[0].to_dict() for position in POSITIONS]
-    return examples, cmc_profile or {}, historical
+    return examples, historical
+
+
+def depth_context_examples(current: pd.DataFrame, calibration: dict) -> list[dict]:
+    if not DEPTH_PATH.exists():
+        return []
+    depth = pd.read_csv(DEPTH_PATH, dtype={"gsis_id": "string"})
+    joined = current.merge(depth[["gsis_id", "depth_position", "depth_rank", "is_starter"]], left_on="player_id", right_on="gsis_id", how="inner")
+    candidates = pd.concat([
+        joined[joined.depth_rank.eq(1)].head(1),
+        joined[joined.depth_rank.eq(2)].head(1),
+        joined[joined.depth_rank.ge(3)].head(1),
+    ]).drop_duplicates("player_id")
+    examples = []
+    for _, row in candidates.iterrows():
+        adjustment = 0.0
+        if row.position == "QB": adjustment = 0.18 if row.depth_rank == 1 else max(-1.25, -0.8 * (row.depth_rank - 1))
+        elif row.position == "RB": adjustment = 0.22 if row.depth_rank == 1 else 0.0 if row.depth_rank == 2 else max(-0.55, -0.12 * (row.depth_rank - 2))
+        elif row.position == "WR": adjustment = 0.12 if row.depth_rank <= 3 else max(-0.4, -0.08 * (row.depth_rank - 3))
+        elif row.position == "TE": adjustment = 0.15 if row.depth_rank == 1 else 0.0 if row.depth_rank == 2 else max(-0.35, -0.1 * (row.depth_rank - 2))
+        examples.append({"name": row["name"], "position": row.position, "depth_role": f"{row.depth_position}{int(row.depth_rank)}", "base_value": row.value, "depth_adjusted_value": value(row.raw_value + adjustment * 17, calibration), "depth_context_ppg": adjustment})
+    return examples
 
 
 def main() -> None:
@@ -208,14 +233,11 @@ def main() -> None:
     args = parser.parse_args()
     calibration = json.loads(CALIBRATION_PATH.read_text())
     identities = pd.read_csv(IDENTITY_PATH, usecols=["player_id", "player_name"], dtype={"player_id": "string"})
-    benchmark = cmc_raw(calibration)
-    current, replacement = current_report(calibration, identities, benchmark, args.projections)
-    superflex, superflex_replacement = current_report(calibration, identities, benchmark, args.projections, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX"], 12)
-    historical, cmc_profile, historical_rows = historical_report(calibration, identities, benchmark)
-    expected = calibration["cmc2019"]
-    for key, fixture_key in [("replacement", "replacementPpg"), ("starter", "starterPpg"), ("elite", "elitePpg")]:
-        if not np.isclose(cmc_profile[key], expected[fixture_key], atol=0.001):
-            raise ValueError(f"CMC calibration drifted for {key}: {cmc_profile[key]} vs {expected[fixture_key]}")
+    current, replacement = current_report(calibration, identities, args.projections)
+    superflex, superflex_replacement = current_report(calibration, identities, args.projections, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "SUPER_FLEX", "BN", "BN", "BN", "BN", "BN", "BN"], 12)
+    historical, historical_rows = historical_report(calibration, identities)
+    cmc_rows = historical_rows[(historical_rows.player_id.eq("00-0033280")) & (historical_rows.season.eq(2019))]
+    cmc_value = float(cmc_rows.iloc[0].value) if not cmc_rows.empty else None
     top_qb = current[current.position.eq("QB")].iloc[0]
     superflex_qb = superflex[superflex.player_id.eq(top_qb.player_id)].iloc[0]
     latest_historical = historical_rows[historical_rows.season.eq(historical_rows.season.max())]
@@ -230,18 +252,26 @@ def main() -> None:
                 row["position_rank"] = rank
                 representative.append(row)
     report = {
-        "benchmark_raw_value": round(benchmark, 4),
-        "cmc_2019_value": 100.0,
+        "calibration_reference_raw_value": calibration["displayCalibration"]["referenceRawValue"],
+        "cmc_2019_value": cmc_value,
+        "distribution": {
+            "min": float(current.value.min()), "median": float(current.value.median()),
+            "p75": float(current.value.quantile(.75)), "p90": float(current.value.quantile(.90)),
+            "p95": float(current.value.quantile(.95)), "max": float(current.value.max()),
+            "exactly_zero": int(current.value.eq(0).sum()), "above_40": int(current.value.gt(40).sum()),
+            "above_50": int(current.value.gt(50).sum()),
+        },
         "current_top_20": current.head(20).to_dict("records"),
         "current_tier_counts": current.tier.value_counts().to_dict(),
         "current_sanity_samples": {
-            "elite": current[current.value.ge(70)].head(10).to_dict("records"),
-            "starters": current[current.value.between(50, 69.9)].head(20).to_dict("records"),
-            "flex_mid_tier": current[current.value.between(35, 49.9)].head(20).to_dict("records"),
-            "bench_depth": current[current.value.between(10, 34.9)].head(20).to_dict("records"),
-            "replacement": current[current.value.lt(10)].head(20).to_dict("records"),
+            "elite": current[current.value.ge(38)].head(10).to_dict("records"),
+            "starters": current[current.value.between(18, 37.9)].head(20).to_dict("records"),
+            "flex_mid_tier": current[current.value.between(10, 17.9)].head(20).to_dict("records"),
+            "bench_depth": current[current.value.between(1, 9.9)].head(20).to_dict("records"),
+            "replacement": current[current.value.lt(1)].head(20).to_dict("records"),
         },
         "diagnostic_players": current[current.name.isin(["Travis Etienne", "Breece Hall"])].to_dict("records"),
+        "depth_context_examples": depth_context_examples(current, calibration),
         "default_replacement": replacement,
         "historical_examples": historical,
         "historical_representative_2025": representative,
@@ -249,7 +279,8 @@ def main() -> None:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
-    print(f"CMC 2019 anchor: {report['cmc_2019_value']:.1f}; raw benchmark: {report['benchmark_raw_value']:.3f}")
+    print(f"CMC 2019 sanity check: {report['cmc_2019_value']:.1f} (not hardcoded)")
+    print("Distribution:", report["distribution"])
     print("Current top values:")
     for row in report["current_top_20"][:10]:
         print(f"  {row['name']} ({row['position']}): {row['value']:.1f} · {row['ppg']:.1f} PPG")

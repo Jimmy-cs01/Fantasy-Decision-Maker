@@ -39,6 +39,21 @@ export function calculatePositionDemand(pool: ValuePlayerProjection[], config: V
     used.add(candidate.playerId);
     demand[candidate.position] += 1;
   }
+
+  const benchSlots = config.rosterPositions.filter((slot) => ["BN", "BENCH"].includes(slot.trim().toUpperCase())).length;
+  const benchDemand = benchSlots * config.teams;
+  const starterDemand = { ...demand };
+  const starterTotal = Math.max(1, Object.values(starterDemand).reduce((sum, count) => sum + count, 0));
+  const allocations = VALUE_POSITIONS.map((position) => {
+    const quota = benchDemand * starterDemand[position] / starterTotal;
+    return { position, count: Math.floor(quota), remainder: quota - Math.floor(quota) };
+  });
+  for (let remaining = benchDemand - allocations.reduce((sum, item) => sum + item.count, 0); remaining > 0; remaining -= 1) {
+    allocations.sort((left, right) => right.remainder - left.remainder || left.position.localeCompare(right.position));
+    allocations[0].count += 1;
+    allocations[0].remainder = -1;
+  }
+  for (const allocation of allocations) demand[allocation.position] += allocation.count;
   return demand;
 }
 
@@ -61,8 +76,8 @@ export function calculateReplacementProfiles(pool: ValuePlayerProjection[], conf
       starterPpg,
       elitePpg,
       scarcityDropoff: Math.max(0, elitePpg - replacementPpg),
+      demandPerTeam: demandedPlayers / Math.max(1, config.teams),
     };
     return [position, profile];
   })) as Record<FantasyPosition, PositionReplacementProfile>;
 }
-

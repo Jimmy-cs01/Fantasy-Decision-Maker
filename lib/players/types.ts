@@ -1,3 +1,5 @@
+import type { ProjectedStatLine } from "@/lib/projections/types";
+
 export type ScoringFormat = "standard" | "half_ppr" | "ppr" | "league";
 export type PositionFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX";
 export type SeasonType = "REG" | "POST";
@@ -37,4 +39,23 @@ export interface ScoringLeague {
   name: string;
   season: number;
   scoring_settings: Record<string, number>;
+  total_rosters: number | null;
+  roster_positions: string[] | null;
+}
+
+export type ProjectionLeaderSort = "player_value" | "value_rank" | "projected_ppg" | "projected_fpts";
+
+export interface ProjectedPlayerLeaderRow {
+  player_id: string;
+  full_name: string;
+  position: string;
+  team: string | null;
+  headshot_url: string | null;
+  projected_ppg: number;
+  projected_fpts: number;
+  player_value: number;
+  overall_rank: number;
+  position_rank: number;
+  depth_role: string | null;
+  projected_stats: ProjectedStatLine;
 }

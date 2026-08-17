@@ -10,6 +10,7 @@ export interface ValueLeagueConfig {
 
 export interface ValuePlayerProjection {
   playerId: string;
+  season?: number;
   fullName: string;
   position: FantasyPosition;
   projectedPpg: number;
@@ -19,6 +20,11 @@ export interface ValuePlayerProjection {
   projectedStats?: ProjectedStatLine;
   priorSeasonPpg?: number | null;
   priorWeight?: number;
+  birthDate?: string | null;
+  rookieSeason?: number | null;
+  depthPosition?: string | null;
+  depthRank?: number | null;
+  depthStarter?: boolean | null;
 }
 
 export interface PositionReplacementProfile {
@@ -28,6 +34,7 @@ export interface PositionReplacementProfile {
   starterPpg: number;
   elitePpg: number;
   scarcityDropoff: number;
+  demandPerTeam: number;
 }
 
 export interface PlayerValueResult {
@@ -48,6 +55,9 @@ export interface PlayerValueResult {
   expectedGamesRemaining: number;
   priorSeasonPpg: number | null;
   priorWeight: number;
+  ageAdjustment: number;
+  depthAdjustment: number;
+  depthRole: string | null;
   overallRank: number;
   positionRank: number;
 }

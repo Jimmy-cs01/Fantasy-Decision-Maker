@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculatePlayerValues } from "./calculate";
-import { CMC_2019_RAW_VALUE, historicalCmc2019AnchorValue, normalizePlayerValue, playerValueTier } from "./formula";
+import { ageUpsidePpg, depthOpportunityPpg, normalizePlayerValue, playerValueTier } from "./formula";
 import { optimizeProjectedLineup } from "./lineup";
 import { priorInfluence, scoreProjectionPool, stabilizeProjection, type ValueProjectionRecord } from "./projections";
 import { calculatePositionDemand, calculateReplacementProfiles } from "./replacement";
@@ -18,25 +18,21 @@ const pool = () => (["QB", "RB", "WR", "TE"] as FantasyPosition[]).flatMap((posi
 const config = (teams: number, rosterPositions: string[], rec = 0.5): ValueLeagueConfig => ({ teams, rosterPositions, scoringSettings: { rec } });
 
 describe("Player Value foundation", () => {
-  it("permanently anchors 2019 Christian McCaffrey at exactly 100", () => {
-    expect(CMC_2019_RAW_VALUE).toBeGreaterThan(0);
-    expect(CMC_2019_RAW_VALUE).toBeCloseTo(315.228, 3);
-    expect(historicalCmc2019AnchorValue()).toBe(100);
-    expect(normalizePlayerValue(CMC_2019_RAW_VALUE)).toBe(99.9);
-    expect(normalizePlayerValue(CMC_2019_RAW_VALUE * 10)).toBe(99.9);
+  it("uses a generic historical calibration rather than a hardcoded player anchor", () => {
+    expect(normalizePlayerValue(315)).toBeCloseTo(49, 1);
+    expect(normalizePlayerValue(450)).toBeGreaterThan(50);
+    expect(normalizePlayerValue(450)).toBeLessThan(55);
   });
 
-  it("never produces a displayed value outside 0–100", () => {
-    expect(normalizePlayerValue(-500)).toBe(0);
-    expect(normalizePlayerValue(Number.MAX_VALUE)).toBe(99.9);
+  it("preserves a small positive value near replacement and approaches zero only far below it", () => {
+    expect(normalizePlayerValue(0)).toBeGreaterThan(0);
+    expect(normalizePlayerValue(-50)).toBeGreaterThan(0);
+    expect(normalizePlayerValue(-1000)).toBe(0);
   });
 
-  it("uses a monotonic nonlinear display calibration without moving the CMC anchor", () => {
-    expect(normalizePlayerValue(CMC_2019_RAW_VALUE * 0.1)).toBeCloseTo(39.8, 1);
-    expect(normalizePlayerValue(CMC_2019_RAW_VALUE * 0.25)).toBeCloseTo(57.4, 1);
-    expect(normalizePlayerValue(CMC_2019_RAW_VALUE * 0.5)).toBeCloseTo(75.8, 1);
-    expect(normalizePlayerValue(CMC_2019_RAW_VALUE * 0.1))
-      .toBeLessThan(normalizePlayerValue(CMC_2019_RAW_VALUE * 0.25));
+  it("keeps the display calibration deterministic and monotonic", () => {
+    const samples = [-500, -100, 0, 50, 150, 315, 500].map(normalizePlayerValue);
+    expect(samples).toEqual([...samples].sort((left, right) => left - right));
   });
 
   it("stabilizes proven Week 1 players and decays the prior as current games accumulate", () => {
@@ -60,6 +56,30 @@ describe("Player Value foundation", () => {
     const large = calculateReplacementProfiles(players, config(14, ["QB", "RB", "RB", "WR", "WR", "TE"]));
     expect(large.RB.demandedPlayers).toBeGreaterThan(small.RB.demandedPlayers);
     expect(large.RB.replacementPpg).toBeLessThan(small.RB.replacementPpg);
+  });
+
+  it("includes bench depth in the roster boundary without changing starter eligibility", () => {
+    const players = pool();
+    const starters = calculateReplacementProfiles(players, config(10, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"]));
+    const deep = calculateReplacementProfiles(players, config(10, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "BN", "BN", "BN", "BN", "BN", "BN"]));
+    expect(deep.RB.demandedPlayers + deep.WR.demandedPlayers + deep.TE.demandedPlayers + deep.QB.demandedPlayers)
+      .toBe(starters.RB.demandedPlayers + starters.WR.demandedPlayers + starters.TE.demandedPlayers + starters.QB.demandedPlayers + 60);
+    expect(deep.RB.replacementPpg).toBeLessThanOrEqual(starters.RB.replacementPpg);
+  });
+
+  it("moderately favors younger comparable players without changing projected PPG", () => {
+    const young = { ...player("young", "RB", 12), season: 2026, birthDate: "2003-01-01" };
+    const old = { ...player("old", "RB", 12), season: 2026, birthDate: "1995-01-01" };
+    expect(ageUpsidePpg(young)).toBeGreaterThan(ageUpsidePpg(old));
+    expect(young.projectedPpg).toBe(old.projectedPpg);
+  });
+
+  it("uses depth as a moderate context signal and does not make young backups worthless", () => {
+    const profile = { ...calculateReplacementProfiles(pool(), config(10, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"])).RB };
+    const starter = { ...player("starter", "RB", 12), season: 2026, birthDate: "2002-01-01", depthRank: 1 };
+    const backup = { ...starter, playerId: "backup", depthRank: 2 };
+    expect(depthOpportunityPpg(starter, profile)).toBeGreaterThan(depthOpportunityPpg(backup, profile));
+    expect(depthOpportunityPpg(backup, profile)).toBeGreaterThanOrEqual(0);
   });
 
   it("allocates FLEX demand only to RB/WR/TE", () => {
@@ -118,8 +138,8 @@ describe("Player Value foundation", () => {
     expect(leader.ceilingValue).toBeGreaterThanOrEqual(leader.medianValue);
     expect(first.values.filter((value) => value.position === "RB").map((value) => value.positionRank).slice(0, 3)).toEqual([1, 2, 3]);
     expect(first.values).toEqual(second.values);
-    expect(playerValueTier(84)).toBe("Elite Fantasy Asset");
-    expect(playerValueTier(4)).toBe("Replacement / Waiver");
+    expect(playerValueTier(42)).toBe("Elite Fantasy Asset");
+    expect(playerValueTier(4)).toBe("Bench Value");
   });
 });
 

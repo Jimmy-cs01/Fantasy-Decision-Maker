@@ -1,7 +1,7 @@
 {
   "defaultLeague": {
     "teams": 10,
-    "rosterPositions": ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX"],
+    "rosterPositions": ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "FLEX", "BN", "BN", "BN", "BN", "BN", "BN"],
     "scoringSettings": { "rec": 0.5 }
   },
   "weights": {
@@ -11,26 +11,17 @@
     "confidence": { "high": 1.0, "medium": 0.98, "low": 0.96 }
   },
   "displayCalibration": {
-    "method": "power",
-    "exponent": 0.4
+    "temperature": 70,
+    "referenceRawValue": 315,
+    "referenceDisplayValue": 49,
+    "softTailStart": 50,
+    "softTailLimit": 55,
+    "softTailRate": 10
   },
   "earlySeasonPrior": {
     "preseasonWeight": 0.2,
     "decayGames": 8,
     "minimumPriorGames": 4,
     "recentSeasonWeights": [0.6, 0.3, 0.1]
-  },
-  "cmc2019": {
-    "playerId": "00-0033280",
-    "season": 2019,
-    "scoring": "Half PPR",
-    "games": 16,
-    "medianPpg": 25.825,
-    "floorPpg": 19.3,
-    "ceilingPpg": 33.5,
-    "replacementPpg": 10.3625,
-    "starterPpg": 13.5933,
-    "elitePpg": 22.4325,
-    "confidence": "high"
   }
 }
