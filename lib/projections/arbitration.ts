@@ -242,10 +242,45 @@ function classifyOutlier(model: number, external: number | null, confidence: num
   return "normal" as const;
 }
 
-function scaleStats(stats: ProjectedStatLine, factor: number) {
-  return Object.fromEntries(
-    Object.entries(stats).map(([key, value]) => [key, finite(value) * factor]),
+const FANTASY_SCORING_COMPONENTS = new Set<keyof ProjectedStatLine>([
+  "passing_yards", "passing_touchdowns", "interceptions_thrown",
+  "rushing_yards", "rushing_touchdowns", "receptions",
+  "receiving_yards", "receiving_touchdowns",
+]);
+
+function reconcileScoringComponents(
+  stats: ProjectedStatLine,
+  targetPpr: number,
+  settings: Record<string, number>,
+  position: string,
+) {
+  const current = calculateProjectedFantasyPoints(stats, settings, position);
+  const factor = current > 0 ? targetPpr / current : 0;
+  const output = Object.fromEntries(
+    Object.entries(stats).map(([key, value]) => [
+      key,
+      FANTASY_SCORING_COMPONENTS.has(key as keyof ProjectedStatLine)
+        ? Math.max(0, finite(value) * factor)
+        : finite(value),
+    ]),
   ) as ProjectedStatLine;
+  output.receptions = Math.min(finite(output.receptions), finite(output.targets));
+  output.completions = Math.min(finite(output.completions), finite(output.pass_attempts));
+
+  // Resolve any residual caused by reception/completion bounds through yards,
+  // never through attempts, targets, carries, or catches. This preserves the
+  // opportunity budgets already established by the football model.
+  const scored = calculateProjectedFantasyPoints(output, settings, position);
+  const residual = targetPpr - scored;
+  const isQuarterback = position.toUpperCase() === "QB";
+  const sink = isQuarterback ? "passing_yards" : "receiving_yards";
+  const rate = isQuarterback
+    ? finite(settings.pass_yd ?? 0.04)
+    : finite(settings.rec_yd ?? 0.1);
+  if (Math.abs(residual) > 0.005 && rate > 0) {
+    output[sink] = Math.max(0, finite(output[sink]) + residual / rate);
+  }
+  return output;
 }
 
 export function arbitrateProjection(input: ProjectionArbitrationInput): ProjectionArbitrationResult {
@@ -272,7 +307,12 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
   if (!input.currentTeam) final = Math.min(final, 0.75);
   final = Math.max(0, final);
   const scoringBeforeScale = calculateProjectedFantasyPoints(opportunityStats, settings, input.position);
-  const reconciled = scaleStats(opportunityStats, scoringBeforeScale > 0 ? final / scoringBeforeScale : 0);
+  const reconciled = reconcileScoringComponents(
+    opportunityStats,
+    scoringBeforeScale > 0 ? final : 0,
+    settings,
+    input.position,
+  );
   const finalPpr = calculateProjectedFantasyPoints(reconciled, settings, input.position);
   const absolute = vegas.ppr == null ? null : Math.abs(opportunityPpr - vegas.ppr);
   const percentage = absolute == null ? null : absolute / Math.max(3, vegas.ppr ?? 0);

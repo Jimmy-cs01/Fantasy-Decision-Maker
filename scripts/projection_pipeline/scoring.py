@@ -25,6 +25,19 @@ def score_projected_stats(
     settings: Mapping[str, float] | None = None,
     position: str | None = None,
 ) -> float:
+    return round(score_projected_stats_exact(stats, settings, position), 2)
+
+
+def score_projected_stats_exact(
+    stats: Mapping[str, float],
+    settings: Mapping[str, float] | None = None,
+    position: str | None = None,
+) -> float:
+    """Score one stat line without presentation rounding.
+
+    Model reconciliation uses this function as its canonical contract. UI and
+    CSV presentation can still use ``score_projected_stats``'s two decimals.
+    """
     rates = dict(STANDARD)
     rates.update(settings or {})
     points = sum(float(stats.get(STAT_KEYS[key], 0) or 0) * rate for key, rate in rates.items() if key in STAT_KEYS)
@@ -33,7 +46,7 @@ def score_projected_stats(
         points += incompletions * float(settings.get("pass_inc", 0) or 0)
         if position:
             points += float(stats.get("receptions", 0) or 0) * float(settings.get(f"bonus_rec_{position.lower()}", 0) or 0)
-    return round(points, 2)
+    return float(points)
 
 
 def default_scores(stats: Mapping[str, float], position: str | None = None) -> dict[str, float]:

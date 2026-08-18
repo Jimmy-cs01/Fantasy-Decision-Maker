@@ -212,6 +212,8 @@ const reconciled = projections.flatMap((record) => {
       opportunity_adjusted_ppr: result.opportunityAdjustedPpr,
       vegas_ppr: result.vegasPpr,
       final_ppr: result.finalPpr,
+      component_ppr: ppr,
+      projected_stats: result.stats,
       outlier: result.outlierStatus,
     },
   }];
@@ -238,6 +240,9 @@ const projectionTeams = new Set(projections.flatMap((record) => {
   return team ? [team] : [];
 }));
 const vegasTeamsMatched = [...projectionTeams].filter((team) => gameByTeam.has(team)).length;
+const componentPprMismatches = reconciled.filter(
+  (row) => Math.abs(row.report.final_ppr - row.report.component_ppr) > 1e-6,
+).length;
 const requiredFailures = countRequiredInputFailures({
   canonicalPlayersComplete: canonicalPlayersMatched === projections.length,
   updatesComplete: updates.length === projections.length && applyPreflight.safe,
@@ -247,7 +252,7 @@ const requiredFailures = countRequiredInputFailures({
   scheduleIsEmpty: games.length === 0,
   vegasGamesQueryFailed: Boolean(consensusResult.error),
   propsQueryFailures: propsResult.queryFailures,
-});
+}) + componentPprMismatches;
 const safeToApply = requiredFailures === 0;
 
 const counts = new Map<string, number>();
@@ -263,6 +268,7 @@ console.log(`Depth roles: matched=${roleByPlayer.size} legitimately missing=${Ma
 console.log(`Recent usage: matched=${historyByPlayer.size} no recent NFL usage=${Math.max(0, projections.length - historyByPlayer.size)} query failures=${historyResult.queryFailures}`);
 console.log(`Vegas games: matched=${vegasTeamsMatched} teams missing=${Math.max(0, projectionTeams.size - vegasTeamsMatched)} query failures=${Number(Boolean(gameResult.error || consensusResult.error))}`);
 console.log(`Player props: players with props=${propsByPlayer.size} players without props=${Math.max(0, projections.length - propsByPlayer.size)} query failures=${propsResult.queryFailures}`);
+console.log(`Component/PPR mismatches: ${componentPprMismatches}`);
 console.log("Player props data is optional when the query succeeds; a failed props query blocks apply because absence cannot be verified.");
 console.log(`Required enrichment failures: ${requiredFailures}`);
 console.log(`Safe to apply: ${safeToApply ? "YES" : "NO"}`);
@@ -304,6 +310,7 @@ writeFileSync("data/processed/projection_reconciliation_report.json", JSON.strin
     recent_usage: { matched: historyByPlayer.size, missing: Math.max(0, projections.length - historyByPlayer.size), query_failures: historyResult.queryFailures },
     vegas_games: { matched_teams: vegasTeamsMatched, missing_teams: Math.max(0, projectionTeams.size - vegasTeamsMatched), query_failures: Number(Boolean(gameResult.error || consensusResult.error)) },
     player_props: { matched_players: propsByPlayer.size, missing_players: Math.max(0, projections.length - propsByPlayer.size), query_failures: propsResult.queryFailures },
+    component_ppr_mismatches: componentPprMismatches,
   },
   rows: reconciled.map((row) => row.report),
 }, null, 2));

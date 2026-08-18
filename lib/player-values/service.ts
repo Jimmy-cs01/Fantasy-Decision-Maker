@@ -12,6 +12,7 @@ import {
 } from "./projections";
 import type { CombinedPlayerValue, ValueLeagueConfig } from "./types";
 import { optionalQuery } from "./optional-query";
+import { resolveActiveProjectionModelVersion } from "../projections/active-model";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -26,8 +27,9 @@ export async function getLatestProjectionPool(
 } | null> {
   let latestQuery = db
     .from("player_projections")
-    .select("season,week,model_version_id")
+    .select("season,week,model_version_id,model_versions!inner(version)")
     .eq("season_type", "REG")
+    .eq("model_versions.version", resolveActiveProjectionModelVersion())
     .order("season", { ascending: false })
     .order("week", { ascending: false })
     .order("generated_at", { ascending: false })

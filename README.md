@@ -246,6 +246,107 @@ and labels the model experimental. Promotion requires a held-out improvement;
 more features alone are not considered sufficient. No database migration or
 Supabase import is required for this experimental phase.
 
+#### Experimental Model v3.1
+
+Model v3.1 keeps the same `pbp_features_v1` source data but changes the model
+architecture rather than adding another large feature family. It predicts
+opportunity first, shrinks sparse efficiency toward position priors, derives
+yards/catches/touchdowns from the resulting attempts and targets, and fits all
+players into pregame team pass, target, backfield-carry, and red-zone budgets.
+Current depth role affects opportunity only. Demonstrated recent usage can
+override stale nominal depth; an unproven RB4 or QB2 cannot inherit a starter
+projection from XGBoost's missing-value defaults.
+
+All feature pruning, hyperparameter, direct/component blend, hybrid, and
+ensemble decisions use 2024 validation data only. The selected configuration
+is persisted before the sealed 2025 test is evaluated. Current Vegas and props
+remain outside training and are not included in the local v3.1 output.
+
+```bash
+npm run model:v3.1:train
+npm run projections:v3.1 -- --season 2026 --week 1
+npm run model:v3.1:explain -- --player="Trey McBride"
+```
+
+#### Experimental Model v3.2 snap integration
+
+Model v3.2 is a versioned, local-only extension of v3.1 that tests official
+nflverse/PFR offensive snap counts under rolling chronological validation. It
+does not treat snaps as routes and never uses prediction-week snaps. Missing
+snap rows remain unknown rather than becoming zero usage.
+
+```bash
+npm run data:snaps
+npm run model:v3.2:features
+npm run model:v3.2:train
+npm run model:v3.2:compare
+npm run model:v3.2:report
+npm run model:v3.2:explain -- --player="Trey McBride"
+```
+
+The experiment trains through each chronological cutoff and validates the next
+season (2022, 2023, 2024, and 2025). These commands never overwrite production
+v2/v3.1 rows. v3.2 remains the reproducible snap-feature baseline.
+
+#### Experimental Model v3.3 correction layer
+
+Model v3.3 keeps v3.2's selected previous-game snap feature and adds only three
+bounded corrections: a pregame rising-role blend, a declining-role-aware floor
+for demonstrated starters, and an exact component-to-PPR scoring pass. It does
+not add football features, retrain a different algorithm, or alter Vegas.
+
+```bash
+npm run model:v3.3:train
+npm run model:v3.3:compare
+npm run model:v3.3:report
+```
+
+The training command evaluates 2022–2025 as four rolling chronological folds.
+The comparison is a local 2026 Week 1 dry run. Neither command imports rows or
+activates a production model.
+
+Production-facing queries use the server-only
+`ACTIVE_PROJECTION_MODEL_VERSION` setting (currently `v2`) rather than selecting
+whichever experiment has the newest `generated_at`. A future rollback is one
+configuration change and redeploy; older projection rows remain untouched.
+
+Artifacts are stored separately under `artifacts/projections/v3_1/`; the dry
+run is written to `data/processed/player_projections_v3_1.csv`. These commands
+never import projections or modify production v2. No migration is required.
+
+#### Local snap-count audit foundation
+
+The weekly `stats_player` release and the play-by-play-derived advanced layer do
+not contain player snap counts. The database columns named `offense_snaps`,
+`team_offense_snaps`, and `offense_snap_percentage` were added earlier as a
+provider-neutral contract, but the active nflverse weekly importer has no
+upstream values to put in them. They therefore remain null; the fields were not
+lost during v3/v3.1 feature selection.
+
+The separate official [nflverse snap-count release](https://github.com/nflverse/nflverse-data/releases/tag/snap_counts)
+contains PFR game-level offensive, defensive, and special-teams counts and
+percentages from 2012 onward. Jimmy GM's experimental local foundation uses
+2018–2025, maps its PFR IDs to canonical GSIS IDs through `player_identity.csv`,
+and writes the ignored `data/processed/player_weekly_snap_statistics.csv.gz`.
+PFR percentages are preserved; the integer team-snap denominator is recovered
+from those rounded percentages and audited with half-up rounding. No Supabase
+table or production model reads this file yet.
+
+```bash
+npm run data:snaps
+npm run data:snaps:report
+```
+
+The nflverse participation release separately identifies all offensive and
+defensive players on each play (GSIS IDs) from 2016 onward. It is useful for
+formation/on-field research, but 2023+ seasons are published only after the
+postseason and do not update in-season. Its `route` field describes the primary
+receiver's route on a play, not every player's routes run. Raw PBP touch/target
+events cannot reconstruct true snaps for players who were on the field without
+the ball, so the PFR snap-count release is the recommended snap-share source.
+Any future v3.2 rolling snap features must be shifted: Week N may use only snap
+data from games before Week N.
+
 ### Schedule, matchup, and odds pipeline
 
 The official nflverse schedule is the canonical game source. It is normalized locally, then imported as one database row per game. `/matchups` joins that schedule to optional consensus odds and links each team to its current depth chart; `/depth-charts` exposes the same canonical player identities directly. Missing odds or depth data renders as `—` and never blocks the schedule, roster, projection, or trade experience.

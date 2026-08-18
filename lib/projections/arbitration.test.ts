@@ -86,6 +86,18 @@ describe("projection arbitration", () => {
     expect(score).toBeCloseTo(result.finalPpr, 1);
   });
 
+  it("does not let Vegas reconciliation manufacture opportunity volume", () => {
+    const stats = { pass_attempts: 32, completions: 20, passing_yards: 210, passing_touchdowns: 1.2 };
+    const result = arbitrateProjection({
+      position: "QB", rawStats: stats, modelPpr: 13.2, currentTeam: "BUF",
+      depth: { depthRank: 1, isStarter: true }, now,
+      vegasGame: { teamImpliedTotal: 30, booksReporting: 8, capturedAt: fresh },
+    });
+    expect(result.stats.pass_attempts).toBe(32);
+    expect(result.stats.completions).toBe(20);
+    expect(result.finalPpr).toBeGreaterThan(0);
+  });
+
   it("uses Sleeper disagreement as independent outlier evidence", () => {
     const result = arbitrateProjection({ position: "RB", rawStats: rbStats, modelPpr: 16.4, currentTeam: "LAR", depth: { depthRank: 4, isStarter: false }, historicalGames: 0, sleeperPpr: 0.2, now });
     expect(["large", "extreme"]).toContain(result.outlierStatus);
