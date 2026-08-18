@@ -15,4 +15,14 @@ describe("trade result presentation", () => {
     expect(component).toContain('label="You"');
     expect(component).toContain('label="Opponent"');
   });
+
+  it("renders one structured impact summary instead of repeating legacy reasons", () => {
+    const suggestionSource = component.slice(
+      component.indexOf("function Suggestion({"),
+      component.indexOf("function LineupImpact"),
+    );
+
+    expect(suggestionSource.match(/<LineupImpact/g)).toHaveLength(1);
+    expect(suggestionSource).not.toContain("suggestion.reasons");
+  });
 });

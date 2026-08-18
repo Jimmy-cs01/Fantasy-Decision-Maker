@@ -2,6 +2,10 @@ import {
   optimizeProjectedLineup,
   type LineupAssignment,
 } from "../player-values/lineup";
+import {
+  isTradeEvaluationSupportedSlot,
+  tradeEvaluationRosterPositions,
+} from "./lineup-slots";
 
 export interface TradePlayer {
   id: string;
@@ -205,7 +209,11 @@ const DEPTH_SLOT_WEIGHTS = [0.11, 0.035, 0.01] as const;
 export function calculateMarginalDepthUtility(roster: TradePlayer[], starterIds: string[]) {
   const starters = new Set(starterIds);
   const byPosition = new Map<string, TradePlayer[]>();
-  for (const player of roster.filter((item) => !starters.has(item.id))) {
+  for (const player of roster.filter(
+    (item) =>
+      !starters.has(item.id) &&
+      isTradeEvaluationSupportedSlot(item.position),
+  )) {
     const position = player.position?.toUpperCase() ?? "OTHER";
     byPosition.set(position, [...(byPosition.get(position) ?? []), player]);
   }
@@ -251,11 +259,15 @@ function enforceRosterCapacity(roster: TradePlayer[], capacity: number, rosterPo
 
 function positionalNeed(roster: TradePlayer[], incoming: TradePlayer[]) {
   const topByPosition = new Map<string, number>();
-  for (const player of roster) {
+  for (const player of roster.filter((item) =>
+    isTradeEvaluationSupportedSlot(item.position),
+  )) {
     const position = player.position ?? "OTHER";
     topByPosition.set(position, Math.max(topByPosition.get(position) ?? 0, player.projectedPpg ?? 0));
   }
-  return clamp(incoming.reduce((total, player) => {
+  return clamp(incoming.filter((player) =>
+    isTradeEvaluationSupportedSlot(player.position),
+  ).reduce((total, player) => {
     const current = topByPosition.get(player.position ?? "OTHER") ?? 0;
     return total + Math.max(0, (player.projectedPpg ?? 0) - current) * 0.12;
   }, 0), 0, 2);
@@ -285,29 +297,48 @@ function impactForTeam(options: {
   rosterPositions: string[];
   leagueTeams: number;
 }): TeamTradeImpact {
-  const before = lineup(options.roster, options.rosterPositions);
-  const capacity = rosterCapacity(options.roster, options.rosterPositions);
+  const evaluationPositions = tradeEvaluationRosterPositions(
+    options.rosterPositions,
+  );
+  const before = lineup(options.roster, evaluationPositions);
+  const capacity = rosterCapacity(options.roster, evaluationPositions);
   const uncappedAfterRoster = afterTrade(options.roster, options.outgoing, options.incoming);
-  const capacityResult = enforceRosterCapacity(uncappedAfterRoster, capacity, options.rosterPositions);
+  const capacityResult = enforceRosterCapacity(
+    uncappedAfterRoster,
+    capacity,
+    evaluationPositions,
+  );
   const afterRoster = capacityResult.roster;
-  const after = lineup(afterRoster, options.rosterPositions);
+  const after = lineup(afterRoster, evaluationPositions);
   const beforeIds = new Set(before.selectedPlayerIds);
   const afterIds = new Set(after.selectedPlayerIds);
   const depthBefore = calculateMarginalDepthUtility(options.roster, before.selectedPlayerIds);
   const depthAfter = calculateMarginalDepthUtility(afterRoster, after.selectedPlayerIds);
-  const assetValueDelta = afterRoster.reduce((sum, player) => sum + (player.value ?? 0), 0)
-    - options.roster.reduce((sum, player) => sum + (player.value ?? 0), 0);
+  const supportedAssetValue = (roster: TradePlayer[]) =>
+    roster
+      .filter((player) => isTradeEvaluationSupportedSlot(player.position))
+      .reduce((sum, player) => sum + (player.value ?? 0), 0);
+  const assetValueDelta = supportedAssetValue(afterRoster)
+    - supportedAssetValue(options.roster);
   const starterPpgDelta = after.projectedPpg - before.projectedPpg;
   const depthDelta = depthAfter - depthBefore;
   const retainedIds = new Set(afterRoster.map((player) => player.id));
-  const retainedIncoming = options.incoming.filter((player) => retainedIds.has(player.id));
+  const retainedIncoming = options.incoming.filter(
+    (player) =>
+      retainedIds.has(player.id) &&
+      isTradeEvaluationSupportedSlot(player.position),
+  );
   const consolidation = consolidationAdjustment(
     options.roster, options.outgoing, retainedIncoming, before.selectedPlayerIds, options.leagueTeams,
   );
   const need = positionalNeed(options.roster, retainedIncoming);
   const incomingIds = new Set(options.incoming.map((player) => player.id));
   const displacedExistingValue = capacityResult.dropped
-    .filter((player) => !incomingIds.has(player.id))
+    .filter(
+      (player) =>
+        !incomingIds.has(player.id) &&
+        isTradeEvaluationSupportedSlot(player.position),
+    )
     .reduce((sum, player) => sum + (player.value ?? 0), 0);
   const freedRosterSlots = Math.max(0, capacity - afterRoster.length);
   const capacityAdjustment = round(clamp(
@@ -330,7 +361,7 @@ function impactForTeam(options: {
     afterRoster,
     outgoing: options.outgoing,
     incoming: retainedIncoming,
-    rosterPositions: options.rosterPositions,
+    rosterPositions: evaluationPositions,
     promotedStarterIds,
     demotedStarterIds,
   });
@@ -456,7 +487,7 @@ function lineupChangeNotes(changes: LineupChanges) {
     ...changes.unfilledSlots.map((slot) => `No projected starter is available for ${slot}`),
     ...changes.incomingStarters.map((player) => `${player.name} enters ${player.slot ?? "the starting lineup"}`),
     ...changes.benchReplacements.map((player) => `${player.name} moves from the bench into ${player.slot ?? "the starting lineup"}`),
-    ...changes.incomingBench.map((player) => `${player.name} remains depth`),
+    ...changes.incomingBench.map((player) => `${player.name} remains on bench`),
     ...changes.outgoingStarters.map((player) => `${player.name} leaves ${player.slot ?? "the starting lineup"}`),
     ...changes.movedStarters.map((player) => `${player.name} moves from ${player.fromSlot} to ${player.toSlot}`),
     ...changes.demoted
@@ -639,7 +670,11 @@ export function findTradeSuggestions(options: {
   leagueTeams?: number;
 }) {
   const candidates = (roster: TradePlayer[]) => roster
-    .filter((player) => (player.value ?? 0) >= 1)
+    .filter(
+      (player) =>
+        (player.value ?? 0) >= 1 &&
+        isTradeEvaluationSupportedSlot(player.position),
+    )
     .sort((left, right) => (right.value ?? 0) - (left.value ?? 0))
     .slice(0, TRADE_SEARCH_LIMITS.playersPerTeam);
   const outgoingPackages = boundedCandidatePackages(candidates(options.myRoster), options.specificPlayerId);

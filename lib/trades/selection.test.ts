@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isTradePlayerSelectionKey,
-  toggleTradePlayerId,
-} from "./selection";
+import { toggleTradePlayerId } from "./selection";
 
 describe("manual trade player selection", () => {
   it("selects and deselects a player without disturbing the rest of the package", () => {
@@ -25,12 +22,5 @@ describe("manual trade player selection", () => {
       "receive-wr",
       "receive-rb",
     ]);
-  });
-
-  it("recognizes only Enter and Space as row-selection keys", () => {
-    expect(isTradePlayerSelectionKey("Enter")).toBe(true);
-    expect(isTradePlayerSelectionKey(" ")).toBe(true);
-    expect(isTradePlayerSelectionKey("Tab")).toBe(false);
-    expect(isTradePlayerSelectionKey("ArrowRight")).toBe(false);
   });
 });

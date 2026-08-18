@@ -3,7 +3,3 @@ export function toggleTradePlayerId(selected: string[], playerId: string) {
     ? selected.filter((id) => id !== playerId)
     : [...selected, playerId];
 }
-
-export function isTradePlayerSelectionKey(key: string) {
-  return key === "Enter" || key === " ";
-}

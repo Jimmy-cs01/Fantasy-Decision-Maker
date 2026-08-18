@@ -532,9 +532,68 @@ describe("Trade Finder", () => {
     expect(result.myImpact.lineupNotes).toEqual(
       expect.arrayContaining([
         "incoming-starter enters RB",
-        "incoming-depth remains depth",
+        "incoming-depth remains on bench",
       ]),
     );
+  });
+
+  it("keeps K and defense slots neutral in lineup impact and Trade Fit", () => {
+    const myRb = player("my-rb", "mine", "RB", 24, 15);
+    const myQb = player("my-qb", "mine", "QB", 30, 20);
+    const theirWr = player("their-wr", "other", "WR", 24, 14);
+    const theirQb = player("their-qb", "other", "QB", 30, 19);
+    const base = evaluateTrade({
+      myRoster: [myQb, myRb],
+      opponentRoster: [theirQb, theirWr],
+      send: [myRb],
+      receive: [theirWr],
+      rosterPositions: ["QB", "FLEX"],
+    });
+    const withUnsupportedSlots = evaluateTrade({
+      myRoster: [myQb, myRb],
+      opponentRoster: [theirQb, theirWr],
+      send: [myRb],
+      receive: [theirWr],
+      rosterPositions: ["QB", "FLEX", "K", "DEF", "DST", "D/ST"],
+    });
+
+    expect(withUnsupportedSlots.myImpact.starterPpgDelta).toBe(
+      base.myImpact.starterPpgDelta,
+    );
+    expect(withUnsupportedSlots.opponentImpact.starterPpgDelta).toBe(
+      base.opponentImpact.starterPpgDelta,
+    );
+    expect(withUnsupportedSlots.myImpact.rosterHoleAdjustment).toBe(
+      base.myImpact.rosterHoleAdjustment,
+    );
+    expect(withUnsupportedSlots.opponentImpact.rosterHoleAdjustment).toBe(
+      base.opponentImpact.rosterHoleAdjustment,
+    );
+    expect(withUnsupportedSlots.finalTradeFit).toBe(base.finalTradeFit);
+    expect([
+      ...withUnsupportedSlots.myImpact.lineupNotes,
+      ...withUnsupportedSlots.opponentImpact.lineupNotes,
+    ].join(" ")).not.toMatch(/starter is available for (K|DEF|DST|D\/ST)/);
+  });
+
+  it("does not let kicker or defense assets create value, depth, or need adjustments", () => {
+    const skillStarter = player("skill-starter", "mine", "RB", 20, 14);
+    const kicker = player("kicker", "other", "K", 30, 12);
+    const defense = player("defense", "other", "DST", 30, 12);
+    const result = evaluateTrade({
+      myRoster: [skillStarter],
+      opponentRoster: [kicker, defense],
+      send: [],
+      receive: [kicker, defense],
+      rosterPositions: ["RB", "K", "DEF", "BN", "BN"],
+    });
+
+    expect(result.myImpact.starterPpgDelta).toBe(0);
+    expect(result.myImpact.assetValueDelta).toBe(0);
+    expect(result.myImpact.depthDelta).toBe(0);
+    expect(result.myImpact.positionalNeedAdjustment).toBe(0);
+    expect(result.myImpact.rosterHoleAdjustment).toBe(0);
+    expect(result.myImpact.lineupNotes).toEqual([]);
   });
 
   it("rearranges FLEX and promotes the best legal bench player after a starter leaves", () => {

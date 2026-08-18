@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PlayerAvatar } from "@/components/players/player-avatar";
 import { PlayerLink } from "@/components/players/player-link";
@@ -14,7 +15,6 @@ import {
   type TradeSuggestion,
 } from "@/lib/trades/engine";
 import {
-  isTradePlayerSelectionKey,
   toggleTradePlayerId,
 } from "@/lib/trades/selection";
 
@@ -387,50 +387,47 @@ export function TradePlayerRow({
 }) {
   const ppg = player.projectedPpg ?? player.lastSeasonPpg ?? null;
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`}
-      aria-pressed={selected}
-      onClick={onToggle}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (!isTradePlayerSelectionKey(event.key)) return;
-        event.preventDefault();
-        onToggle();
-      }}
-      className={`grid min-h-[3.75rem] w-full cursor-pointer grid-cols-[2.35rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-300 ${selected ? "bg-cyan-400/15 ring-1 ring-cyan-300" : "hover:bg-slate-800/60"}`}
-    >
-      <span aria-hidden="true">
+    <div className="relative">
+      <button
+        type="button"
+        aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`}
+        aria-pressed={selected}
+        onClick={onToggle}
+        className={`grid min-h-[3.75rem] w-full cursor-pointer grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-300 ${selected ? "bg-cyan-400/15 ring-1 ring-cyan-300" : "hover:bg-slate-800/60"}`}
+      >
+        <span className="size-11" aria-hidden="true" />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-bold text-white">
+            {player.name}
+          </span>
+          <small className="flex items-center gap-1 text-slate-500">
+            <PositionBadge position={player.position} />
+            {player.nflTeam ?? "FA"}
+          </small>
+        </span>
+        <span className="grid grid-cols-2 gap-3 text-right tabular-nums">
+          <MetricInline label="VALUE" value={player.value} />
+          <MetricInline
+            label={
+              player.projectedPpg == null && player.lastSeasonPpg != null
+                ? "2025 PPG"
+                : "PROJ PPG"
+            }
+            value={ppg}
+          />
+        </span>
+        {player.opponent ? <span className="col-start-2 -mt-1 block text-[10px] text-slate-500">
+          {player.isHome ? "vs" : "@"} {player.opponent}{player.teamImpliedTotal != null ? ` · implied ${player.teamImpliedTotal.toFixed(1)}` : ""}
+        </span> : null}
+      </button>
+      <Link
+        href={`/players/${encodeURIComponent(player.id)}`}
+        aria-label={`View ${player.name} profile`}
+        onClick={(event) => event.stopPropagation()}
+        className="absolute top-1/2 left-2 z-10 flex size-11 -translate-y-1/2 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-cyan-300"
+      >
         <PlayerAvatar name={player.name} headshotUrl={player.headshotUrl} />
-      </span>
-      <span className="min-w-0">
-        <PlayerLink
-          playerId={player.id}
-          stopPropagation
-          className="block truncate text-sm font-bold text-white"
-        >
-          {player.name}
-        </PlayerLink>
-        <small className="flex items-center gap-1 text-slate-500">
-          <PositionBadge position={player.position} />
-          {player.nflTeam ?? "FA"}
-        </small>
-      </span>
-      <span className="grid grid-cols-2 gap-3 text-right tabular-nums">
-        <MetricInline label="VALUE" value={player.value} />
-        <MetricInline
-          label={
-            player.projectedPpg == null && player.lastSeasonPpg != null
-              ? "2025 PPG"
-              : "PROJ PPG"
-          }
-          value={ppg}
-        />
-      </span>
-      {player.opponent ? <span className="col-start-2 -mt-1 block text-[10px] text-slate-500">
-        {player.isHome ? "vs" : "@"} {player.opponent}{player.teamImpliedTotal != null ? ` · implied ${player.teamImpliedTotal.toFixed(1)}` : ""}
-      </span> : null}
+      </Link>
     </div>
   );
 }
@@ -597,7 +594,6 @@ function Suggestion({
         myImpact={suggestion.myImpact}
         opponentImpact={suggestion.opponentImpact}
       />
-      <ul className="mt-2 space-y-1 text-xs text-slate-500">{suggestion.reasons.map((reason) => <li key={reason}>• {reason}</li>)}</ul>
     </article>
   );
 }
