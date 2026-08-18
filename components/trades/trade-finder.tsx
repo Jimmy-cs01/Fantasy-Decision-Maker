@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PlayerAvatar } from "@/components/players/player-avatar";
+import { PlayerLink } from "@/components/players/player-link";
 import { TeamChoiceStrip } from "@/components/trades/team-choice-strip";
 import {
   evaluateTrade,
@@ -386,21 +387,20 @@ function TradePlayerRow({
 }) {
   const ppg = player.projectedPpg ?? player.lastSeasonPpg ?? null;
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onToggle}
+    <div
       className={`grid min-h-[3.75rem] w-full grid-cols-[2.35rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2 text-left transition ${selected ? "bg-cyan-400/15 ring-1 ring-cyan-300" : "hover:bg-slate-800/60"}`}
     >
-      <PlayerAvatar name={player.name} headshotUrl={player.headshotUrl} />
+      <button type="button" aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`} aria-pressed={selected} onClick={onToggle} className="rounded-full focus-visible:outline-2 focus-visible:outline-cyan-300">
+        <PlayerAvatar name={player.name} headshotUrl={player.headshotUrl} />
+      </button>
       <span className="min-w-0">
-        <b className="block truncate text-sm text-white">{player.name}</b>
+        <PlayerLink playerId={player.id} className="block truncate text-sm font-bold text-white">{player.name}</PlayerLink>
         <small className="flex items-center gap-1 text-slate-500">
           <PositionBadge position={player.position} />
           {player.nflTeam ?? "FA"}
         </small>
       </span>
-      <span className="grid grid-cols-2 gap-3 text-right tabular-nums">
+      <button type="button" aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`} aria-pressed={selected} onClick={onToggle} className="grid grid-cols-2 gap-3 rounded text-right tabular-nums focus-visible:outline-2 focus-visible:outline-cyan-300">
         <MetricInline label="VALUE" value={player.value} />
         <MetricInline
           label={
@@ -410,11 +410,11 @@ function TradePlayerRow({
           }
           value={ppg}
         />
-      </span>
+      </button>
       {player.opponent ? <span className="col-start-2 -mt-1 block text-[10px] text-slate-500">
         {player.isHome ? "vs" : "@"} {player.opponent}{player.teamImpliedTotal != null ? ` · implied ${player.teamImpliedTotal.toFixed(1)}` : ""}
       </span> : null}
-    </button>
+    </div>
   );
 }
 
@@ -530,12 +530,10 @@ function SummarySide({
       <p className="text-[10px] font-black tracking-widest text-cyan-300">
         {label}
       </p>
-      <div className="mt-1 min-h-6 text-sm text-slate-200">
+      <div className="mt-1 min-h-6 space-y-1 text-sm text-slate-200">
         {players.length ? (
           players.map((player) => (
-            <span key={player.id} className="mr-2 inline-block">
-              {player.name} <b>{player.value?.toFixed(1) ?? "—"}</b>
-            </span>
+            <TradePackagePlayer key={player.id} player={player} compact />
           ))
         ) : (
           <span className="text-slate-600">Select players</span>
@@ -575,6 +573,7 @@ function Suggestion({
           players={suggestion.receive}
         />
       </div>
+      <TradeDifference sendValue={suggestion.sendValue} receiveValue={suggestion.receiveValue} />
       <div className="mt-3 grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
         <p>You: <b className="text-cyan-200">{suggestion.myImpact.starterPpgDelta >= 0 ? "+" : ""}{suggestion.myImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {suggestion.myImpact.depthDelta >= 0 ? "+" : ""}{suggestion.myImpact.depthDelta.toFixed(1)}</p>
         <p>Opponent: <b className="text-cyan-200">{suggestion.opponentImpact.starterPpgDelta >= 0 ? "+" : ""}{suggestion.opponentImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {suggestion.opponentImpact.depthDelta >= 0 ? "+" : ""}{suggestion.opponentImpact.depthDelta.toFixed(1)}</p>
@@ -596,22 +595,42 @@ function SuggestionSide({
   return (
     <div>
       <p className="text-[10px] font-black tracking-widest text-slate-500">
-        {label} · {value.toFixed(1)}
+        {label}
       </p>
+      <p className="mt-1 text-xs text-slate-500">Selected value <b className="text-white">{value.toFixed(1)}</b></p>
       {players.map((player) => (
-        <div key={player.id} className="mt-2 flex items-center gap-2">
-          <PlayerAvatar name={player.name} headshotUrl={player.headshotUrl} />
-          <span className="min-w-0 flex-1">
-            <b className="block truncate text-sm">{player.name}</b>
-            <small className="text-slate-500">
-              {player.position ?? "—"} · {player.nflTeam ?? "FA"}
-            </small>
-          </span>
-          <b className="text-cyan-200">{player.value?.toFixed(1) ?? "—"}</b>
-        </div>
+        <TradePackagePlayer key={player.id} player={player} />
       ))}
     </div>
   );
+}
+
+function TradePackagePlayer({ player, compact = false }: { player: TradePlayer; compact?: boolean }) {
+  if (compact) return <div className="flex items-center justify-between gap-2">
+    <PlayerLink playerId={player.id} className="min-w-0 truncate font-semibold">{player.name}</PlayerLink>
+    <span className="font-bold tabular-nums text-cyan-100">{player.value?.toFixed(1) ?? "—"}</span>
+  </div>;
+  return <div className="mt-2 grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl bg-slate-950/55 p-2">
+    <PlayerAvatar name={player.name} headshotUrl={player.headshotUrl} />
+    <span className="min-w-0">
+      <PlayerLink playerId={player.id} className="block truncate text-sm font-bold">{player.name}</PlayerLink>
+      <small className="block truncate text-slate-500">{player.position ?? "—"} · {player.nflTeam ?? "FA"}{player.depthRole ? ` · Depth ${player.depthRole}` : ""}</small>
+      {player.opponent ? <small className="block text-slate-600">{player.isHome ? "vs" : "@"} {player.opponent}</small> : null}
+    </span>
+    <span className="grid grid-cols-2 gap-2 text-right tabular-nums">
+      <MetricInline label="VALUE" value={player.value} />
+      <MetricInline label="PROJ PPG" value={player.projectedPpg} />
+    </span>
+  </div>;
+}
+
+export function TradeDifference({ sendValue, receiveValue }: { sendValue: number; receiveValue: number }) {
+  const absolute = Math.abs(receiveValue - sendValue);
+  const average = Math.max(1, (sendValue + receiveValue) / 2);
+  const direction = receiveValue > sendValue ? "receive side higher" : sendValue > receiveValue ? "send side higher" : "even";
+  return <p className="mt-3 border-t border-slate-800 pt-2 text-xs text-slate-400">
+    Standalone value difference <b className="text-slate-100">{absolute.toFixed(1)} · {(absolute / average * 100).toFixed(1)}%</b> <span className="text-slate-500">({direction})</span>
+  </p>;
 }
 
 function TradeResultsSkeleton() {

@@ -33,6 +33,26 @@ export interface ValuePlayerProjection {
   depthPosition?: string | null;
   depthRank?: number | null;
   depthStarter?: boolean | null;
+  historicalContext?: HistoricalValueContext | null;
+}
+
+export interface HistoricalSeasonSignal {
+  season: number;
+  games: number;
+  ppg: number;
+  positionRank: number;
+  positionPercentile: number;
+  recencyWeight: number;
+}
+
+export interface HistoricalValueContext {
+  seasons: HistoricalSeasonSignal[];
+  weightedPpg: number;
+  weightedPositionPercentile: number;
+  peakPpg: number;
+  bestPositionRank: number | null;
+  highEndSeasonRate: number;
+  sampleGames: number;
 }
 
 export interface PositionReplacementProfile {
@@ -66,6 +86,10 @@ export interface PlayerValueResult {
   ageAdjustment: number;
   depthAdjustment: number;
   draftAdjustment: number;
+  historicalUpsideAdjustment: number;
+  historicalWeightedPpg: number | null;
+  historicalBestPositionRank: number | null;
+  historicalSeasons: number;
   opportunityConfidence: number;
   draftLabel: string | null;
   depthRole: string | null;

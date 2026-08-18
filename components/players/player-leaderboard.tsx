@@ -1,3 +1,4 @@
+import { PlayerLink } from "@/components/players/player-link";
 import Link from "next/link";
 import { ArrowDown } from "lucide-react";
 import { PlayerAvatar } from "@/components/players/player-avatar";
@@ -26,7 +27,7 @@ export function PlayerLeaderboard({ rows, columns, scoring, leagueId, activeSort
           <span className="text-center font-mono text-base font-black text-slate-300 sm:text-lg">{rank}</span>
           <PlayerAvatar name={row.full_name} headshotUrl={row.headshot_url} />
           <div className="min-w-0">
-            <Link href={`/players/${row.player_id}?season=${season}&scoring=${scoring}&seasonType=${seasonType}${leagueId ? `&leagueId=${leagueId}` : ""}`} className="block truncate text-sm font-black leading-tight text-slate-50 transition hover:text-cyan-300 sm:text-base">{row.full_name}</Link>
+            <PlayerLink playerId={row.player_id} query={`?season=${season}&scoring=${scoring}&seasonType=${seasonType}${leagueId ? `&leagueId=${leagueId}` : ""}`} className="block truncate text-sm font-black leading-tight text-slate-50 sm:text-base">{row.full_name}</PlayerLink>
             <p className="truncate text-[11px] font-semibold leading-4 text-slate-400 sm:text-xs"><span className="text-cyan-300">{row.historical_position || "—"}</span><span aria-hidden="true"> · </span>{team}<span aria-hidden="true"> · </span>{row.games_played} GP</p>
           </div>
           <div className="rounded-lg bg-slate-950/80 px-2 py-1 text-right ring-1 ring-slate-800">

@@ -1,3 +1,4 @@
+import { PlayerLink } from "./player-link";
 import Link from "next/link";
 import { ArrowDown } from "lucide-react";
 import { PlayerAvatar } from "./player-avatar";
@@ -22,7 +23,7 @@ export function ProjectedPlayerLeaderboard({ rows, activeSort, leagueId, buildHr
       <div className="grid grid-cols-[2rem_minmax(0,1fr)_5.5rem] items-center gap-2 px-3 py-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_7rem] sm:px-4">
         <PlayerAvatar name={row.full_name} headshotUrl={row.headshot_url} />
         <div className="min-w-0">
-          <Link href={`/players/${row.player_id}?season=2026${leagueId ? `&leagueId=${leagueId}` : ""}`} className="block truncate text-sm font-black hover:text-cyan-300 sm:text-base">{row.full_name}</Link>
+          <PlayerLink playerId={row.player_id} query={`?season=2026${leagueId ? `&leagueId=${leagueId}` : ""}`} className="block truncate text-sm font-black sm:text-base">{row.full_name}</PlayerLink>
           <p className="truncate text-[11px] font-semibold text-slate-400"><span className="text-cyan-300">{row.position}</span> · {row.team ?? "FA"}{row.depth_role ? ` · Depth ${row.depth_role}` : ""} · {row.position}#{row.position_rank}</p>
         </div>
         <div className="text-right"><strong className="block text-lg text-cyan-200">{row.player_value.toFixed(1)}</strong><span className="text-[10px] font-bold text-slate-500">VALUE · #{row.overall_rank}</span></div>

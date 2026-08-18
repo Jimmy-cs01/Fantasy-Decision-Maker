@@ -29,6 +29,7 @@
     "projections:audit": "vite-node scripts/audit_projections.ts",
     "value:calibrate": "python3 scripts/calibrate_player_values.py",
     "value:archetypes": "vite-node scripts/report_player_value_archetypes.ts",
+    "value:history-report": "vite-node scripts/report_historical_value_changes.ts",
     "trade:benchmark": "vite-node scripts/benchmark_trade_finder.ts"
   },
   "dependencies": {

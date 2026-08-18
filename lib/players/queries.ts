@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { withLeagueScoring, type SleeperScoringSettings } from "@/lib/fantasy/league-scoring";
+import { calculateLeagueSeasonPoints, withLeagueScoring, type SleeperScoringSettings } from "@/lib/fantasy/league-scoring";
 import { FANTASY_POSITIONS, scoringSortColumn } from "./filters";
 import type { LeaderSort, PlayerSeasonRow, PositionFilter, ScoringFormat, ScoringLeague, SeasonType } from "./types";
 import type { ProjectedPlayerLeaderRow, ProjectionLeaderSort } from "./types";
@@ -125,16 +125,45 @@ export async function getPlayerDetail(playerId: string, requestedSeason?: number
   const { data: player, error: playerError } = await db.from("players").select("id,full_name,gsis_id,pfr_player_id,sleeper_player_id,historical_position,sleeper_position,sleeper_fantasy_positions,team,birth_date,college,rookie_season,height,weight,headshot_url").eq("id", playerId).maybeSingle();
   if (playerError) throw new Error(`Unable to load player: ${playerError.message}`);
   if (!player) return null;
-  const { data: seasonRows, error: seasonError } = await db.from("player_season_stats").select("season").eq("player_id", playerId).eq("season_type", seasonType).order("season", { ascending: false });
+  const { data: seasonRows, error: seasonError } = await db.from("player_season_stats").select("*").eq("player_id", playerId).eq("season_type", seasonType).order("season", { ascending: false });
   if (seasonError) throw new Error(`Unable to load player seasons: ${seasonError.message}`);
   const seasons = (seasonRows ?? []).map((row) => Number(row.season));
+  const history = (seasonRows ?? []).slice(0, 4) as PlayerSeasonRow[];
   const season = requestedSeason && seasons.includes(requestedSeason) ? requestedSeason : seasons[0];
-  if (!season) return { player, seasons, season: null, summary: null, weeks: [] };
+  if (!season) return { player, seasons, season: null, summary: null, weeks: [], history };
   const [{ data: summary, error: summaryError }, { data: weeks, error: weeksError }] = await Promise.all([
     db.from("player_season_stats").select("*").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).maybeSingle(),
     db.from("player_weekly_nfl_statistics").select("week,game_id,team,opponent_team,historical_position,pass_attempts,completions,completion_percentage,passing_yards,yards_per_attempt,passing_touchdowns,interceptions_thrown,first_down_passes,passing_epa,passing_cpoe,pacr,rush_attempts,rushing_yards,yards_per_carry,rushing_touchdowns,rushing_first_downs,rushing_epa,targets,receptions,receiving_yards,yards_per_target,yards_per_reception,receiving_touchdowns,receiving_first_downs,receiving_air_yards,yards_after_catch,receiving_adot,receiving_epa,racr,target_share,air_yards_share,wopr,true_touches,offense_snaps,team_offense_snaps,offense_snap_percentage,fantasy_points_standard,fantasy_points_half_ppr,fantasy_points_ppr").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).eq("provider", "nflverse").order("week", { ascending: true }),
   ]);
   if (summaryError) throw new Error(`Unable to load season summary: ${summaryError.message}`);
   if (weeksError) throw new Error(`Unable to load weekly stats: ${weeksError.message}`);
-  return { player, seasons, season, summary: summary as PlayerSeasonRow | null, weeks: weeks ?? [] };
+  return { player, seasons, season, summary: summary as PlayerSeasonRow | null, weeks: weeks ?? [], history };
+}
+
+export async function getHistoricalPositionFinishes(
+  playerId: string,
+  position: string | null,
+  seasons: number[],
+  scoringSettings: SleeperScoringSettings,
+) {
+  if (!position || !seasons.length) return new Map<number, number>();
+  const db = await createClient();
+  const { data, error } = await db.from("player_value_season_history").select("*")
+    .eq("historical_position", position).in("season", seasons).eq("season_type", "REG");
+  if (error) {
+    console.warn("Historical position finishes unavailable", { position, seasons, message: error.message });
+    return new Map<number, number>();
+  }
+  const rows = data as unknown as PlayerSeasonRow[];
+  const bySeason = new Map<number, PlayerSeasonRow[]>();
+  for (const row of rows) bySeason.set(Number(row.season), [...(bySeason.get(Number(row.season)) ?? []), row]);
+  return new Map([...bySeason].flatMap(([season, cohort]) => {
+    const ranked = cohort.filter((row) => Number(row.games_played) >= 6).sort((left, right) => {
+      const leftPpg = calculateLeagueSeasonPoints(left, scoringSettings) / Number(left.games_played);
+      const rightPpg = calculateLeagueSeasonPoints(right, scoringSettings) / Number(right.games_played);
+      return rightPpg - leftPpg || left.player_id.localeCompare(right.player_id);
+    });
+    const rank = ranked.findIndex((row) => row.player_id === playerId) + 1;
+    return rank > 0 ? [[season, rank] as const] : [];
+  }));
 }

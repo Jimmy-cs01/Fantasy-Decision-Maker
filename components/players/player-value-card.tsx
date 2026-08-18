@@ -87,6 +87,13 @@ export function PlayerValueCard({
             {preferred.depthAdjustment.toFixed(1)}
           </span>
         )}
+        {preferred.historicalUpsideAdjustment > 0 && (
+          <span>
+            Historical upside +{preferred.historicalUpsideAdjustment.toFixed(1)}
+            {preferred.historicalWeightedPpg != null ? ` · ${preferred.historicalSeasons}-season weighted ${preferred.historicalWeightedPpg.toFixed(1)} PPG` : ""}
+            {preferred.historicalBestPositionRank != null ? ` · peak ${preferred.position}${preferred.historicalBestPositionRank}` : ""}
+          </span>
+        )}
         <span>
           Opportunity confidence{" "}
           {(preferred.opportunityConfidence * 100).toFixed(0)}%

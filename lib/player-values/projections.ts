@@ -1,11 +1,15 @@
 import { calculateProjectedFantasyPoints } from "../projections/scoring";
 import { EARLY_SEASON_PRIOR } from "./config";
+import { HISTORICAL_UPSIDE } from "./config";
+import { calculateLeagueSeasonPoints } from "../fantasy/league-scoring";
+import type { PlayerSeasonRow } from "../players/types";
 import type {
   ProjectedStatLine,
   ProjectionConfidence,
 } from "../projections/types";
 import { VALUE_POSITIONS } from "./replacement";
 import type { FantasyPosition, ValuePlayerProjection } from "./types";
+import type { HistoricalValueContext } from "./types";
 
 export interface CurrentDepthRole {
   playerId: string;
@@ -100,11 +104,107 @@ export function stabilizeProjection(
   };
 }
 
+/** Builds position-relative, multi-season evidence without changing weekly projections. */
+export function historicalValueContexts(
+  rows: PlayerSeasonRow[],
+  scoringSettings: Record<string, number>,
+  projectionSeason: number,
+) {
+  const eligible = rows.flatMap((row) => {
+    const position = row.historical_position?.toUpperCase() as FantasyPosition | undefined;
+    const seasonsAgo = projectionSeason - Number(row.season);
+    const games = Number(row.games_played ?? 0);
+    if (
+      !position ||
+      !VALUE_POSITIONS.includes(position) ||
+      seasonsAgo < 1 ||
+      seasonsAgo > HISTORICAL_UPSIDE.seasonWeights.length ||
+      games < HISTORICAL_UPSIDE.minimumSeasonGames
+    ) return [];
+    return [{
+      playerId: row.player_id,
+      season: Number(row.season),
+      position,
+      games,
+      ppg: calculateLeagueSeasonPoints(row, scoringSettings) / games,
+      recencyWeight: HISTORICAL_UPSIDE.seasonWeights[seasonsAgo - 1],
+    }];
+  });
+  const cohorts = new Map<string, typeof eligible>();
+  for (const season of eligible) {
+    const key = `${season.season}:${season.position}`;
+    cohorts.set(key, [...(cohorts.get(key) ?? []), season]);
+  }
+  const ranks = new Map<string, { rank: number; percentile: number }>();
+  for (const [key, cohort] of cohorts) {
+    const ordered = [...cohort].sort((left, right) => right.ppg - left.ppg || left.playerId.localeCompare(right.playerId));
+    ordered.forEach((season, index) => ranks.set(`${key}:${season.playerId}`, {
+      rank: index + 1,
+      percentile: ordered.length <= 1 ? 1 : 1 - index / (ordered.length - 1),
+    }));
+  }
+  const ranked = eligible.map((season) => {
+    const result = ranks.get(`${season.season}:${season.position}:${season.playerId}`)!;
+    return {
+      ...season,
+      positionRank: result.rank,
+      positionPercentile: result.percentile,
+    };
+  });
+  const byPlayer = new Map<string, typeof ranked>();
+  for (const season of ranked) byPlayer.set(season.playerId, [...(byPlayer.get(season.playerId) ?? []), season]);
+  return new Map([...byPlayer].map(([playerId, seasons]) => {
+    const ordered = seasons.sort((left, right) => right.season - left.season);
+    const weight = ordered.reduce((sum, season) => sum + season.recencyWeight, 0);
+    const context: HistoricalValueContext = {
+      seasons: ordered,
+      weightedPpg: ordered.reduce((sum, season) => sum + season.ppg * season.recencyWeight, 0) / weight,
+      weightedPositionPercentile: ordered.reduce((sum, season) => sum + season.positionPercentile * season.recencyWeight, 0) / weight,
+      peakPpg: Math.max(...ordered.map((season) => season.ppg)),
+      bestPositionRank: Math.min(...ordered.map((season) => season.positionRank)),
+      highEndSeasonRate: ordered.filter((season) => season.positionPercentile >= HISTORICAL_UPSIDE.highEndPercentile).length / ordered.length,
+      sampleGames: ordered.reduce((sum, season) => sum + season.games, 0),
+    };
+    return [playerId, context];
+  }));
+}
+
+export function projectionPriors(
+  historyRows: PlayerSeasonRow[],
+  scoringSettings: Record<string, number>,
+  projectionSeason: number,
+) {
+  const currentGames = new Map(historyRows.filter((row) => row.season === projectionSeason)
+    .map((row) => [row.player_id, Number(row.games_played ?? 0)]));
+  const byPlayer = new Map<string, Array<{ ppg: number; games: number; weight: number }>>();
+  for (const row of historyRows) {
+    const seasonsAgo = projectionSeason - row.season;
+    if (seasonsAgo < 1 || seasonsAgo > EARLY_SEASON_PRIOR.recentSeasonWeights.length || !Number(row.games_played)) continue;
+    const entries = byPlayer.get(row.player_id) ?? [];
+    entries.push({
+      ppg: calculateLeagueSeasonPoints(row, scoringSettings) / Number(row.games_played),
+      games: Number(row.games_played),
+      weight: EARLY_SEASON_PRIOR.recentSeasonWeights[seasonsAgo - 1],
+    });
+    byPlayer.set(row.player_id, entries);
+  }
+  return new Map([...new Set([...byPlayer.keys(), ...currentGames.keys()])].map((playerId) => {
+    const entries = byPlayer.get(playerId) ?? [];
+    const weight = entries.reduce((total, entry) => total + entry.weight, 0);
+    return [playerId, {
+      ppg: weight > 0 ? entries.reduce((total, entry) => total + entry.ppg * entry.weight, 0) / weight : 0,
+      games: entries.reduce((total, entry) => total + entry.games, 0),
+      currentSeasonGames: currentGames.get(playerId) ?? 0,
+    }];
+  }));
+}
+
 export function scoreProjectionPool(
   records: ValueProjectionRecord[],
   scoringSettings: Record<string, number>,
   priors: Map<string, ProjectionPrior> = new Map(),
   depthRoles: Map<string, CurrentDepthRole> = new Map(),
+  historicalContexts: Map<string, HistoricalValueContext> = new Map(),
 ) {
   return records.flatMap((record): ValuePlayerProjection[] => {
     const player = projectionIdentity(record);
@@ -151,6 +251,7 @@ export function scoreProjectionPool(
         depthPosition: depth?.depthPosition ?? null,
         depthRank: depth?.depthRank ?? null,
         depthStarter: depth?.isStarter ?? null,
+        historicalContext: historicalContexts.get(record.player_id) ?? null,
       },
     ];
   });

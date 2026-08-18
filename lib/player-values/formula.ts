@@ -1,4 +1,4 @@
-import { VALUE_DISPLAY_CALIBRATION, VALUE_WEIGHTS } from "./config";
+import { HISTORICAL_UPSIDE, VALUE_DISPLAY_CALIBRATION, VALUE_WEIGHTS } from "./config";
 import type { ProjectionConfidence } from "../projections/types";
 import type {
   PlayerValueResult,
@@ -275,6 +275,43 @@ export function depthOpportunityPpg(
       : Math.max(-0.35, -0.1 * (rank - 2));
 }
 
+function historicalAgeGate(player: ValuePlayerProjection) {
+  const age = ageAtSeason(player.birthDate, player.season);
+  if (age === null) return 0.75;
+  if (player.position === "QB") return age <= 36 ? 1 : clamp(1 - (age - 36) * 0.18, 0.25, 1);
+  const declineStart = player.position === "RB" ? 27 : player.position === "WR" ? 30 : 31;
+  return age <= declineStart ? 1 : clamp(1 - (age - declineStart) * 0.2, 0.2, 1);
+}
+
+/** Bounded proof-of-ceiling premium; current projection and current role remain dominant. */
+export function historicalUpsidePpg(
+  player: ValuePlayerProjection,
+  profile: PositionReplacementProfile,
+) {
+  const history = player.historicalContext;
+  if (!history?.seasons.length) return 0;
+  const excellence = clamp(
+    (history.weightedPositionPercentile - 0.65) / 0.35,
+    0,
+    1,
+  );
+  const repeatability = 0.45 + 0.55 * history.highEndSeasonRate;
+  const sample = clamp(history.sampleGames / 32, 0.25, 1);
+  const role = depthOpportunityFactor(player, profile);
+  const starterProjection = clamp(
+    (player.projectedPpg - profile.replacementPpg) /
+      Math.max(1, profile.starterPpg - profile.replacementPpg),
+    0.15,
+    1,
+  );
+  return clamp(
+    HISTORICAL_UPSIDE.maximumPpgAdjustment * excellence * repeatability * sample *
+      historicalAgeGate(player) * role * starterProjection,
+    0,
+    HISTORICAL_UPSIDE.maximumPpgAdjustment,
+  );
+}
+
 function scenarioValue(
   ppg: number,
   expectedGames: number,
@@ -306,13 +343,14 @@ export function calculatePlayerValue(
   const depthAdjustment = depthOpportunityPpg(player, profile);
   const draftAdjustment = draftContextPpg(player);
   const opportunity = opportunityConfidence(player, profile);
+  const historicalUpsideAdjustment = historicalUpsidePpg(player, profile);
   const positiveAgeAdjustment =
     Math.max(0, ageAdjustment) *
     draftCapitalConfidence(player) *
     depthOpportunityFactor(player, profile);
   const gatedAgeAdjustment =
     ageAdjustment < 0 ? ageAdjustment : positiveAgeAdjustment;
-  const contextualPpg = gatedAgeAdjustment + depthAdjustment + draftAdjustment;
+  const contextualPpg = gatedAgeAdjustment + depthAdjustment + draftAdjustment + historicalUpsideAdjustment;
   const raw = calculateRawPlayerValue({
     medianPpg: player.projectedPpg,
     floorPpg: player.floorPpg,
@@ -361,6 +399,10 @@ export function calculatePlayerValue(
     ageAdjustment: round(gatedAgeAdjustment),
     depthAdjustment: round(depthAdjustment),
     draftAdjustment: round(draftAdjustment),
+    historicalUpsideAdjustment: round(historicalUpsideAdjustment),
+    historicalWeightedPpg: player.historicalContext ? round(player.historicalContext.weightedPpg) : null,
+    historicalBestPositionRank: player.historicalContext?.bestPositionRank ?? null,
+    historicalSeasons: player.historicalContext?.seasons.length ?? 0,
     opportunityConfidence: Math.round(opportunity * 100) / 100,
     draftLabel: draftLabel(player),
     depthRole:

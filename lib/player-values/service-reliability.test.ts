@@ -16,6 +16,7 @@ function queryBuilder(result: {
     "gte",
     "lte",
     "order",
+    "range",
     "abortSignal",
   ]) {
     chain[method] = () => chain;

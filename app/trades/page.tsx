@@ -117,6 +117,7 @@ export default async function TradesPage({
         opponent: player.opponent,
         isHome: player.is_home,
         teamImpliedTotal: player.team_implied_total,
+        depthRole: player.depth_role,
       })),
     };
   });

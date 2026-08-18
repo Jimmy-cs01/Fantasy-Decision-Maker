@@ -39,5 +39,12 @@
     "decayGames": 8,
     "minimumPriorGames": 4,
     "recentSeasonWeights": [0.6, 0.3, 0.1]
+  },
+  "historicalUpside": {
+    "seasonWeights": [1.0, 0.7, 0.45, 0.25],
+    "minimumSeasonGames": 6,
+    "highEndPercentile": 0.8,
+    "elitePercentile": 0.9,
+    "maximumPpgAdjustment": 0.9
   }
 }

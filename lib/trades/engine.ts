@@ -13,6 +13,7 @@ export interface TradePlayer {
   opponent?: string | null;
   isHome?: boolean | null;
   teamImpliedTotal?: number | null;
+  depthRole?: string | null;
 }
 
 export interface TeamTradeImpact {

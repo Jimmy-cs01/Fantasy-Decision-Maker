@@ -36,6 +36,7 @@ export interface LeagueAnalyticsPlayer {
   overall_rank: number | null;
   value_tier: string | null;
   confidence: string | null;
+  depth_role: string | null;
   opponent: string | null;
   is_home: boolean | null;
   team_implied_total: number | null;
@@ -270,6 +271,7 @@ export async function getLeagueRosterAnalytics(
             overall_rank: playerValue?.overallRank ?? null,
             value_tier: playerValue?.tier ?? null,
             confidence: playerValue?.confidence ?? null,
+            depth_role: playerValue?.depthRole ?? null,
             opponent: matchup?.opponent ?? null,
             is_home: matchup?.isHome ?? null,
             team_implied_total: matchup?.teamImpliedTotal ?? null,

@@ -95,3 +95,43 @@ export async function getDepthChartsForTeams(db: DatabaseClient, teams: string[]
   }
   return byTeam;
 }
+
+/** Lightweight profile query: role data only, without recalculating league-wide values. */
+export async function getOffensiveDepthChartForTeam(
+  db: DatabaseClient,
+  team: string | null,
+  season: number,
+) {
+  if (!team) return [] as DepthChartPlayer[];
+  const { data, error } = await db.from("player_depth_chart_roles")
+    .select("player_id,team,position,depth_position,depth_rank,is_starter,source_updated_at,players(id,full_name,headshot_url)")
+    .eq("season", season).eq("team", team).in("position", ["QB", "RB", "WR", "TE"])
+    .order("source_updated_at", { ascending: false });
+  if (error) {
+    console.warn("Player profile depth chart unavailable; continuing without it.", { team, season, message: error.message });
+    return [] as DepthChartPlayer[];
+  }
+  const seen = new Set<string>();
+  return ((data ?? []) as unknown as RoleRow[]).flatMap((row): DepthChartPlayer[] => {
+    if (seen.has(row.player_id)) return [];
+    seen.add(row.player_id);
+    const player = Array.isArray(row.players) ? row.players[0] : row.players;
+    if (!player) return [];
+    return [{
+      id: player.id,
+      name: player.full_name,
+      team: row.team,
+      position: row.position,
+      depthPosition: row.depth_position,
+      depthRank: Number(row.depth_rank),
+      isStarter: Boolean(row.is_starter),
+      headshotUrl: player.headshot_url,
+      projectedPpg: null,
+      playerValue: null,
+    }];
+  }).sort((left, right) => {
+    const positions = ["QB", "RB", "WR", "TE"];
+    return positions.indexOf(left.position) - positions.indexOf(right.position)
+      || left.depthRank - right.depthRank || left.name.localeCompare(right.name);
+  });
+}

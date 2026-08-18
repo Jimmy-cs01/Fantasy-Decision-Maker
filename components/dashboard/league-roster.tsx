@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { PlayerAvatar } from "../players/player-avatar";
+import { PlayerLink } from "../players/player-link";
 
 export interface LeagueRosterPlayer {
   id: string;
@@ -49,13 +49,13 @@ function RosterRow({ player, bench, leagueId }: { player: LeagueRosterPlayer; be
   const ppg = player.projected_ppg;
   const slot = player.roster_slot || "START";
   const compactSlot = slot === "SUPERFLEX" ? "SFLEX" : slot;
-  return <Link href={`/players/${player.id}?scoring=league&leagueId=${leagueId}`} className="grid min-h-16 grid-cols-[3.5rem_2.25rem_minmax(0,1fr)_4.25rem] items-center gap-2.5 px-2.5 py-2 transition hover:bg-slate-800/45 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-300 sm:grid-cols-[4rem_2.5rem_minmax(0,1fr)_5rem] sm:px-3">
+  return <div className="grid min-h-16 grid-cols-[3.5rem_2.25rem_minmax(0,1fr)_4.25rem] items-center gap-2.5 px-2.5 py-2 transition hover:bg-slate-800/45 sm:grid-cols-[4rem_2.5rem_minmax(0,1fr)_5rem] sm:px-3">
     <span title={bench ? "Bench" : slot} className={`grid h-10 place-items-center rounded-xl px-1 text-[11px] font-black tracking-wide shadow-sm sm:h-11 sm:text-xs ${slotBadgeClass(bench ? "BN" : slot)}`}>
       {bench ? "BN" : compactSlot}
     </span>
     <PlayerAvatar name={player.full_name} headshotUrl={player.headshot_url} />
     <div className="min-w-0 leading-tight">
-      <p className="truncate text-sm font-bold text-slate-50 sm:text-[15px]">{player.full_name}</p>
+      <PlayerLink playerId={player.id} query={`?scoring=league&leagueId=${leagueId}`} className="block truncate text-sm font-bold text-slate-50 sm:text-[15px]">{player.full_name}</PlayerLink>
       <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 sm:text-xs">
         {player.team || "FA"} <span aria-hidden="true">•</span> {player.position || "—"}
       </p>
@@ -65,7 +65,7 @@ function RosterRow({ player, bench, leagueId }: { player: LeagueRosterPlayer; be
       <span className="mt-0.5 block text-[10px] font-bold text-cyan-300">{player.player_value == null ? "VALUE —" : `VALUE ${player.player_value.toFixed(1)}`}</span>
       {player.position_rank != null && <span className="mt-0.5 block text-[9px] font-semibold text-slate-500">{player.position}{player.position_rank}</span>}
     </span>
-  </Link>;
+  </div>;
 }
 
 export function slotBadgeClass(slot: string) {

@@ -9,6 +9,7 @@ import {
   normalizePlayerValue,
   opportunityConfidence,
   playerValueTier,
+  historicalUpsidePpg,
 } from "./formula";
 import { optimizeProjectedLineup } from "./lineup";
 import {
@@ -16,6 +17,7 @@ import {
   scoreProjectionPool,
   stabilizeProjection,
   type ValueProjectionRecord,
+  historicalValueContexts,
 } from "./projections";
 import {
   calculatePositionDemand,
@@ -456,6 +458,50 @@ describe("Player Value foundation", () => {
     expect(first.values).toEqual(second.values);
     expect(playerValueTier(42)).toBe("Elite Fantasy Asset");
     expect(playerValueTier(4)).toBe("Bench Value");
+  });
+
+  it("uses four-season recency decay and position-relative historical excellence", () => {
+    const seasons = [2025, 2024, 2023, 2022];
+    const rows = seasons.flatMap((season, index) => [
+      { player_id: "elite", historical_position: "WR", season, season_type: "REG", games_played: 16, fantasy_points_standard: 320 - index * 15 },
+      { player_id: "starter", historical_position: "WR", season, season_type: "REG", games_played: 16, fantasy_points_standard: 210 },
+      { player_id: "depth", historical_position: "WR", season, season_type: "REG", games_played: 16, fantasy_points_standard: 100 },
+    ]) as unknown as import("../players/types").PlayerSeasonRow[];
+    const contexts = historicalValueContexts(rows, { rec: 0 }, 2026);
+    const elite = contexts.get("elite")!;
+    expect(elite.seasons.map((season) => season.recencyWeight)).toEqual([1, 0.7, 0.45, 0.25]);
+    expect(elite.bestPositionRank).toBe(1);
+    expect(elite.weightedPositionPercentile).toBeGreaterThan(contexts.get("starter")!.weightedPositionPercentile);
+  });
+
+  it("gives proven prime-age elite history a bounded premium without changing projection", () => {
+    const profile = calculateReplacementProfiles(pool(), config(10, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"])).WR;
+    const comparable = { ...player("comparable", "WR", 22), season: 2026, birthDate: "1999-06-16", depthRank: 1, historicalGames: 50 };
+    const proven: ValuePlayerProjection = { ...comparable, playerId: "proven", historicalContext: {
+      seasons: [2025, 2024, 2023, 2022].map((season, index) => ({ season, games: 15, ppg: 18 + index, positionRank: index + 1, positionPercentile: 0.95 - index * 0.03, recencyWeight: [1, 0.7, 0.45, 0.25][index] })), weightedPpg: 19.5, weightedPositionPercentile: 0.95, peakPpg: 22,
+      bestPositionRank: 1, highEndSeasonRate: 0.75, sampleGames: 60,
+    } };
+    const base = calculatePlayerValue(comparable, profile, 17);
+    const elite = calculatePlayerValue(proven, profile, 17);
+    const oneYear = calculatePlayerValue({ ...proven, playerId: "one-year", historicalContext: {
+      ...proven.historicalContext!, seasons: proven.historicalContext!.seasons.slice(0, 1),
+      highEndSeasonRate: 1, sampleGames: 15,
+    } }, profile, 17);
+    expect(elite.value).toBeGreaterThan(base.value);
+    expect(elite.value).toBeGreaterThan(oneYear.value);
+    expect(oneYear.value).toBeGreaterThanOrEqual(base.value);
+    expect(elite.historicalUpsideAdjustment).toBeGreaterThan(0);
+    expect(elite.historicalUpsideAdjustment).toBeLessThanOrEqual(0.9);
+    expect(proven.projectedPpg).toBe(comparable.projectedPpg);
+  });
+
+  it("lets current backup role and age suppress old elite history", () => {
+    const profile = calculateReplacementProfiles(pool(), config(10, ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"])).WR;
+    const history = { seasons: [{ season: 2022, games: 17, ppg: 22, positionRank: 1, positionPercentile: 1, recencyWeight: 0.25 }], weightedPpg: 22, weightedPositionPercentile: 1, peakPpg: 22, bestPositionRank: 1, highEndSeasonRate: 1, sampleGames: 17 };
+    const primeStarter = { ...player("prime", "WR", 14), season: 2026, birthDate: "1999-01-01", depthRank: 1, historicalContext: history };
+    const agingBackup = { ...primeStarter, playerId: "aging", birthDate: "1992-01-01", depthRank: 5 };
+    expect(historicalUpsidePpg(agingBackup, profile)).toBeLessThan(historicalUpsidePpg(primeStarter, profile) * 0.25);
+    expect(historicalUpsidePpg({ ...primeStarter, historicalContext: null }, profile)).toBe(0);
   });
 });
 

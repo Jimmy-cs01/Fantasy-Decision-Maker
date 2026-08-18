@@ -1,11 +1,12 @@
 import "server-only";
 import { createClient } from "../supabase/server";
-import { calculateLeagueSeasonPoints } from "../fantasy/league-scoring";
 import type { PlayerSeasonRow } from "../players/types";
-import { DEFAULT_VALUE_LEAGUE, EARLY_SEASON_PRIOR } from "./config";
+import { DEFAULT_VALUE_LEAGUE } from "./config";
 import { calculatePlayerValues } from "./calculate";
 import {
   scoreProjectionPool,
+  historicalValueContexts,
+  projectionPriors,
   type CurrentDepthRole,
   type ValueProjectionRecord,
 } from "./projections";
@@ -73,64 +74,14 @@ export function calculateValueContexts(
   depthRoles: Map<string, CurrentDepthRole> = new Map(),
 ) {
   const projectionSeason = Number(projectionPool[0]?.season ?? 0);
-  const priorsFor = (settings: Record<string, number>) => {
-    const currentGames = new Map(
-      historyRows
-        .filter((row) => row.season === projectionSeason)
-        .map((row) => [row.player_id, Number(row.games_played ?? 0)]),
-    );
-    const weights = EARLY_SEASON_PRIOR.recentSeasonWeights;
-    const byPlayer = new Map<
-      string,
-      Array<{ ppg: number; games: number; weight: number }>
-    >();
-    for (const row of historyRows) {
-      const seasonsAgo = projectionSeason - row.season;
-      if (
-        seasonsAgo < 1 ||
-        seasonsAgo > weights.length ||
-        !Number(row.games_played)
-      )
-        continue;
-      const entries = byPlayer.get(row.player_id) ?? [];
-      entries.push({
-        ppg:
-          calculateLeagueSeasonPoints(row, settings) / Number(row.games_played),
-        games: Number(row.games_played),
-        weight: weights[seasonsAgo - 1],
-      });
-      byPlayer.set(row.player_id, entries);
-    }
-    const playerIds = new Set([...byPlayer.keys(), ...currentGames.keys()]);
-    return new Map(
-      [...playerIds].map((playerId) => {
-        const entries = byPlayer.get(playerId) ?? [];
-        const weight = entries.reduce(
-          (total, entry) => total + entry.weight,
-          0,
-        );
-        return [
-          playerId,
-          {
-            ppg:
-              weight > 0
-                ? entries.reduce(
-                    (total, entry) => total + entry.ppg * entry.weight,
-                    0,
-                  ) / weight
-                : 0,
-            games: entries.reduce((total, entry) => total + entry.games, 0),
-            currentSeasonGames: currentGames.get(playerId) ?? 0,
-          },
-        ];
-      }),
-    );
-  };
+  const priorsFor = (settings: Record<string, number>) =>
+    projectionPriors(historyRows, settings, projectionSeason);
   const generalPool = scoreProjectionPool(
     projectionPool,
     DEFAULT_VALUE_LEAGUE.scoringSettings,
     priorsFor(DEFAULT_VALUE_LEAGUE.scoringSettings),
     depthRoles,
+    historicalValueContexts(historyRows, DEFAULT_VALUE_LEAGUE.scoringSettings, projectionSeason),
   );
   const general = calculatePlayerValues(
     generalPool,
@@ -144,6 +95,7 @@ export function calculateValueContexts(
           leagueConfig.scoringSettings,
           priorsFor(leagueConfig.scoringSettings),
           depthRoles,
+          historicalValueContexts(historyRows, leagueConfig.scoringSettings, projectionSeason),
         ),
         leagueConfig,
         week,
@@ -233,22 +185,30 @@ export async function getProjectionHistoryRows(
       season,
       playerCount: playerIds.length,
     },
+    timeoutMs: 12_000,
     query: async (signal) => {
       const rows: PlayerSeasonRow[] = [];
-      for (let start = 0; start < playerIds.length; start += 500) {
+      // Load the complete fantasy-position cohort so historical percentiles and
+      // position finishes are league-independent rather than relative only to
+      // whichever roster happened to request values.
+      for (let start = 0; ; start += 1000) {
         const { data, error } = await db
           .from("player_value_season_history")
           .select("*")
-          .in("player_id", playerIds.slice(start, start + 500))
-          .gte("season", season - 3)
+          .in("historical_position", ["QB", "RB", "WR", "TE"])
+          .gte("season", season - 4)
           .lte("season", season)
           .eq("season_type", "REG")
+          .order("season", { ascending: false })
+          .order("player_id", { ascending: true })
+          .range(start, start + 999)
           .abortSignal(signal);
         if (error)
           throw new Error(
             "Unable to load projection history: " + error.message,
           );
         rows.push(...((data ?? []) as PlayerSeasonRow[]));
+        if ((data ?? []).length < 1000) break;
       }
       return rows;
     },
