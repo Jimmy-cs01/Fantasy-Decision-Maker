@@ -77,7 +77,7 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
     {playerValue && <PlayerValueCard value={playerValue} leagueName={selectedLeague?.name} />}
     <PlayerWeeklyProjections rows={projectionSeries} currentWeek={projection?.week} />
     <PlayerHistory rows={historicalRows} ppgKey={scoringConfig.ppg} positionFinishes={positionFinishes} />
-    <section className="mt-6"><DepthChart team={`${player.team ?? "NFL team"} offense`} players={offensiveDepth} highlightedPlayerId={playerId} /></section>
+    <section className="mt-6"><DepthChart team={`${player.team ?? "NFL team"} offense`} players={offensiveDepth} highlightedPlayerId={playerId} compact /></section>
     {summary ? <>
       <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label={`${SCORING_COLUMNS[scoring].label} PPG`} value={display(summary[scoringConfig.ppg], 1)} accent /><Metric label="Games" value={display(summary.games_played)} /><Metric label="Total Yards" value={display(summary.total_yards)} /><Metric label="Total Touchdowns" value={display(summary.total_touchdowns)} /></section>
       <div className="mt-6 grid gap-5 lg:grid-cols-2"><StatSection title="Fantasy summary" stats={[["Standard", summary.fantasy_points_standard, "", 1], ["Half PPR", summary.fantasy_points_half_ppr, "", 1], ["PPR", summary.fantasy_points_ppr, "", 1], ...(scoring === "league" ? [["League", summary.fantasy_points_league, "", 1] as Stat] : []), ["True Touches", summary.true_touches], ["Snap Share", summary.snap_share, "%", 1, true], ["Games", summary.games_played]]} />

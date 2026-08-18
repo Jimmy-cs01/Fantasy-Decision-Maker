@@ -37,6 +37,22 @@ describe("player profile sections", () => {
     expect(html).toContain("ring-cyan-400/30");
   });
 
+  it("renders a compact, linked offensive depth chart without detailed analytics", () => {
+    const players = [
+      { id: "qb1", name: "Quarterback One", team: "MIN", position: "QB", depthPosition: "QB", depthRank: 1, isStarter: true, headshotUrl: null, projectedPpg: 20, playerValue: 30 },
+      { id: "wr1", name: "Receiver One", team: "MIN", position: "WR", depthPosition: "WR", depthRank: 1, isStarter: true, headshotUrl: null, projectedPpg: 18, playerValue: 28 },
+      { id: "k1", name: "Kicker One", team: "MIN", position: "K", depthPosition: "K", depthRank: 1, isStarter: true, headshotUrl: null, projectedPpg: 8, playerValue: 3 },
+    ];
+    const html = renderToStaticMarkup(<DepthChart team="MIN offense" players={players} highlightedPlayerId="wr1" compact />);
+    expect(html).toContain('href="/players/qb1"');
+    expect(html).toContain('aria-current="true"');
+    expect(html).toContain("WR1 · current role");
+    expect(html).toContain("sm:grid-cols-2");
+    expect(html).not.toContain("Kicker One");
+    expect(html).not.toContain("VALUE");
+    expect(html).not.toContain("PPG");
+  });
+
   it("renders historical seasons newest first with position finishes", () => {
     const rows = [2025, 2024].map((season) => ({
       player_id: "p1", season, season_type: "REG", historical_position: "WR", games_played: 17,
@@ -46,5 +62,17 @@ describe("player profile sections", () => {
     expect(html.indexOf(">2025<")).toBeLessThan(html.indexOf(">2024<"));
     expect(html).toContain("WR4");
     expect(html).toContain("WR2");
+    expect(html).toContain("Final position rank");
+    expect(html).toContain("final rank uses total fantasy points");
+  });
+
+  it("renders a missing historical position finish as an em dash", () => {
+    const rows = [{
+      player_id: "p1", season: 2025, season_type: "REG", historical_position: "TE", games_played: 2,
+      fantasy_points_ppr_per_game: 4, total_yards: 50, total_touchdowns: 0,
+    }] as unknown as PlayerSeasonRow[];
+    const html = renderToStaticMarkup(<PlayerHistory rows={rows} ppgKey="fantasy_points_ppr_per_game" positionFinishes={new Map()} />);
+    expect(html).toContain("Final position rank");
+    expect(html).toContain("—");
   });
 });

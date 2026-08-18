@@ -96,4 +96,34 @@ describe("projection arbitration", () => {
     const result = arbitrateProjection({ position: "RB", rawStats: { rush_attempts: 2, rushing_yards: 8, rushing_touchdowns: 1 }, modelPpr: 6.8, currentTeam: "BUF", depth: { depthRank: 4, isStarter: false }, now });
     expect(result.stats.rushing_touchdowns ?? 0).toBeLessThan(0.03);
   });
+
+  it("preserves an established elite TE1 workload without bypassing projection sanity", () => {
+    const result = arbitrateProjection({
+      position: "TE",
+      rawStats: { targets: 9.5, receptions: 6.8, receiving_yards: 76, receiving_touchdowns: 0.45 },
+      modelPpr: 17.1,
+      currentTeam: "ARI",
+      depth: { depthRank: 1, depthPosition: "TE", isStarter: true },
+      historicalGames: 34,
+      recentOpportunityShare: 0.31,
+      now,
+    });
+    expect(result.opportunityConfidence).toBe(1);
+    expect(result.finalPpr).toBeGreaterThan(16);
+  });
+
+  it("does not let old elite history override a current TE3 role", () => {
+    const result = arbitrateProjection({
+      position: "TE",
+      rawStats: { targets: 9.5, receptions: 6.8, receiving_yards: 76, receiving_touchdowns: 0.45 },
+      modelPpr: 17.1,
+      currentTeam: "ARI",
+      depth: { depthRank: 3, depthPosition: "TE", isStarter: false },
+      historicalGames: 80,
+      recentOpportunityShare: 0.08,
+      now,
+    });
+    expect(result.opportunityConfidence).toBeLessThan(0.5);
+    expect(result.finalPpr).toBeLessThan(8);
+  });
 });

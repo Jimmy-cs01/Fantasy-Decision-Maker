@@ -88,18 +88,17 @@ export function calculateValueContexts(
     DEFAULT_VALUE_LEAGUE,
     week,
   );
-  const league = leagueConfig
-    ? calculatePlayerValues(
-        scoreProjectionPool(
+  const leaguePool = leagueConfig
+    ? scoreProjectionPool(
           projectionPool,
           leagueConfig.scoringSettings,
           priorsFor(leagueConfig.scoringSettings),
           depthRoles,
           historicalValueContexts(historyRows, leagueConfig.scoringSettings, projectionSeason),
-        ),
-        leagueConfig,
-        week,
-      )
+        )
+    : null;
+  const league = leagueConfig && leaguePool
+    ? calculatePlayerValues(leaguePool, leagueConfig, week)
     : null;
   const leagueByPlayerId = new Map(
     league?.values.map((value) => [value.playerId, value]) ?? [],
@@ -107,6 +106,8 @@ export function calculateValueContexts(
   return {
     general,
     league,
+    generalProjections: new Map(generalPool.map((projection) => [projection.playerId, projection])),
+    leagueProjections: new Map((leaguePool ?? []).map((projection) => [projection.playerId, projection])),
     byPlayerId: new Map(
       general.values.map((value) => {
         const leagueValue = leagueByPlayerId.get(value.playerId) ?? null;

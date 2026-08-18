@@ -1,12 +1,13 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { calculateLeagueSeasonPoints, withLeagueScoring, type SleeperScoringSettings } from "@/lib/fantasy/league-scoring";
+import { withLeagueScoring, type SleeperScoringSettings } from "@/lib/fantasy/league-scoring";
 import { FANTASY_POSITIONS, scoringSortColumn } from "./filters";
 import type { LeaderSort, PlayerSeasonRow, PositionFilter, ScoringFormat, ScoringLeague, SeasonType } from "./types";
 import type { ProjectedPlayerLeaderRow, ProjectionLeaderSort } from "./types";
 import { calculateValueContexts, getCurrentDepthRoles, getLatestProjectionPool, getProjectionHistoryRows } from "@/lib/player-values/service";
 import { projectionIdentity } from "@/lib/player-values/projections";
 import type { ValueLeagueConfig } from "@/lib/player-values/types";
+import { calculateHistoricalPositionFinishes } from "./position-finishes";
 
 async function attachHeadshots(db: Awaited<ReturnType<typeof createClient>>, rows: PlayerSeasonRow[]) {
   if (!rows.length) return rows;
@@ -154,16 +155,5 @@ export async function getHistoricalPositionFinishes(
     console.warn("Historical position finishes unavailable", { position, seasons, message: error.message });
     return new Map<number, number>();
   }
-  const rows = data as unknown as PlayerSeasonRow[];
-  const bySeason = new Map<number, PlayerSeasonRow[]>();
-  for (const row of rows) bySeason.set(Number(row.season), [...(bySeason.get(Number(row.season)) ?? []), row]);
-  return new Map([...bySeason].flatMap(([season, cohort]) => {
-    const ranked = cohort.filter((row) => Number(row.games_played) >= 6).sort((left, right) => {
-      const leftPpg = calculateLeagueSeasonPoints(left, scoringSettings) / Number(left.games_played);
-      const rightPpg = calculateLeagueSeasonPoints(right, scoringSettings) / Number(right.games_played);
-      return rightPpg - leftPpg || left.player_id.localeCompare(right.player_id);
-    });
-    const rank = ranked.findIndex((row) => row.player_id === playerId) + 1;
-    return rank > 0 ? [[season, rank] as const] : [];
-  }));
+  return calculateHistoricalPositionFinishes(data as unknown as PlayerSeasonRow[], playerId, scoringSettings);
 }

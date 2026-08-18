@@ -30,6 +30,8 @@ export interface LeagueAnalyticsPlayer {
   roster_slot: string | null;
   roster_slot_index: number | null;
   projected_ppg: number | null;
+  projection_floor: number | null;
+  projection_ceiling: number | null;
   last_season_ppg: number | null;
   player_value: number | null;
   position_rank: number | null;
@@ -253,6 +255,8 @@ export async function getLeagueRosterAnalytics(
           entry.is_starter &&
           (!storedSlot || ["STARTER", "BN", "BENCH"].includes(storedSlot));
         const playerValue = values.get(identity.id)?.league;
+        const scoredProjection = valueContexts?.leagueProjections.get(identity.id)
+          ?? valueContexts?.generalProjections.get(identity.id);
         const matchup = identity.team ? matchupByTeam.get(identity.team) : null;
         return [
           {
@@ -265,6 +269,8 @@ export async function getLeagueRosterAnalytics(
               ? (fallback?.rosterSlotIndex ?? entry.roster_slot_index)
               : entry.roster_slot_index,
             projected_ppg: playerValue?.projectedPpg ?? null,
+            projection_floor: scoredProjection?.floorPpg ?? null,
+            projection_ceiling: scoredProjection?.ceilingPpg ?? null,
             last_season_ppg: lastSeasonPpgByPlayerId.get(identity.id) ?? null,
             player_value: playerValue?.value ?? null,
             position_rank: playerValue?.positionRank ?? null,
