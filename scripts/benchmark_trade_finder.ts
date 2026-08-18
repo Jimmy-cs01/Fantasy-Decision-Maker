@@ -1,5 +1,6 @@
 import { performance } from "node:perf_hooks";
 import {
+  evaluateTrade,
   findTradeSuggestions,
   tradeTotals,
   type TradePlayer,
@@ -142,6 +143,42 @@ const measurements = [
   ),
 ];
 console.table(measurements);
+const representative = findTradeSuggestions({
+  myRoster: mine,
+  otherRosters: others,
+  rosterPositions,
+});
+console.log("Selected trade shapes:", representative.reduce<Record<string, number>>((counts, suggestion) => {
+  counts[suggestion.tradeShape] = (counts[suggestion.tradeShape] ?? 0) + 1;
+  return counts;
+}, {}));
+const exampleA = [
+  { ...roster("example-a", 0)[4], id: "asset-a", value: 36, projectedPpg: 18 },
+  { ...roster("example-a", 0)[1], id: "asset-b", value: 26, projectedPpg: 13 },
+  ...roster("example-a", 0).slice(0, 4).map((player, index) => ({ ...player, id: `a-roster-${index}` })),
+];
+const exampleB = [
+  { ...roster("example-b", 0)[4], id: "asset-c", value: 28, projectedPpg: 14 },
+  { ...roster("example-b", 0)[1], id: "asset-d", value: 20, projectedPpg: 10 },
+  { ...roster("example-b", 0)[8], id: "asset-e", value: 16, projectedPpg: 8 },
+  ...roster("example-b", 0).slice(0, 4).map((player, index) => ({ ...player, id: `b-roster-${index}` })),
+];
+const bloatedPackage = evaluateTrade({
+  myRoster: exampleA,
+  opponentRoster: exampleB,
+  send: exampleA.slice(0, 2),
+  receive: exampleB.slice(0, 3),
+  rosterPositions: ["QB", "RB", "WR", "FLEX", "BN", "BN"],
+  leagueTeams: 12,
+});
+console.log("Representative 2-for-3 diagnostics:", {
+  myStarterPpgDelta: bloatedPackage.myImpact.starterPpgDelta,
+  myMarginalDepthDelta: bloatedPackage.myImpact.marginalDepthDelta,
+  myDroppedPlayers: bloatedPackage.myImpact.droppedPlayerIds,
+  myAssetValueDelta: bloatedPackage.myImpact.assetValueDelta,
+  packageComplexityAdjustment: bloatedPackage.packageComplexityAdjustment,
+  finalTradeFit: bloatedPackage.finalTradeFit,
+});
 console.log(
   `Estimated legacy 11-opponent search: specific ~${Math.round(legacySpecific.milliseconds * 11)}ms; whole ~${Math.round(legacyWhole.milliseconds * 11)}ms (linear opponent extrapolation).`,
 );

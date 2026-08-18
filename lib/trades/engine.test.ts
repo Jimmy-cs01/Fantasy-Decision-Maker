@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateMarginalDepthUtility,
   diversifyTradeSuggestions,
   evaluateTrade,
   findTradeSuggestions,
+  supportedAutomaticTradeShape,
   tradePackages,
   tradeTotals,
   type TradePlayer,
+  type TradeSuggestion,
 } from "./engine";
 
 const player = (
@@ -226,15 +229,17 @@ describe("Trade Finder", () => {
     expect(result.myImpact.consolidationAdjustment).toBeLessThanOrEqual(2.5);
   });
 
-  it("supports 2-for-3 and 3-for-2 without allowing 3-for-3", () => {
+  it("supports bounded 3-for-3 packages alongside existing package shapes", () => {
     const results = findTradeSuggestions({
       myRoster: [...mine, player("my-te", "mine", "TE", 7)],
       otherRosters: [[...theirs, player("their-wr2", "other", "WR", 5)]],
       rosterPositions: slots,
       valueWindow: 0.5,
     });
-    expect(results.every((result) => !(result.send.length === 3 && result.receive.length === 3))).toBe(true);
+    expect(results.every((result) => result.send.length <= 3 && result.receive.length <= 3)).toBe(true);
     expect(tradePackages(mine, 3).some((items) => items.length === 3)).toBe(true);
+    expect(supportedAutomaticTradeShape(3, 3)).toBe(true);
+    expect(supportedAutomaticTradeShape(1, 3)).toBe(false);
   });
 
   it("diversifies the first result round across opponents", () => {
@@ -304,5 +309,171 @@ describe("Trade Finder", () => {
     });
     expect(result.myImpact.promotedStarterIds).toContain("qb-two");
     expect(result.myImpact.starterPpgDelta).toBeGreaterThan(0);
+  });
+
+  it("gives useful first-line depth much more utility than an RB6-level addition", () => {
+    const starter = player("starter", "mine", "RB", 30, 17);
+    const usefulBefore = [starter, player("weak-rb3", "mine", "RB", 7, 5)];
+    const usefulAfter = [...usefulBefore, player("useful-rb3", "mine", "RB", 18, 10)];
+    const deepBefore = [
+      starter,
+      player("rb3", "mine", "RB", 20, 11),
+      player("rb4", "mine", "RB", 15, 9),
+      player("rb5", "mine", "RB", 10, 7),
+    ];
+    const deepAfter = [...deepBefore, player("rb6", "mine", "RB", 10, 7.5)];
+    const usefulGain = calculateMarginalDepthUtility(usefulAfter, [starter.id])
+      - calculateMarginalDepthUtility(usefulBefore, [starter.id]);
+    const buriedGain = calculateMarginalDepthUtility(deepAfter, [starter.id])
+      - calculateMarginalDepthUtility(deepBefore, [starter.id]);
+    expect(usefulGain).toBeGreaterThan(0.4);
+    expect(buriedGain).toBeLessThan(0.1);
+    expect(usefulGain).toBeGreaterThan(buriedGain * 8);
+  });
+
+  it("drops the weakest player when an asymmetric package exceeds roster capacity", () => {
+    const myRoster = [
+      player("starter", "mine", "RB", 25, 15),
+      player("bench", "mine", "RB", 12, 9),
+      player("outgoing", "mine", "WR", 8, 7),
+    ];
+    const opponentRoster = [
+      player("incoming", "other", "WR", 12, 10),
+      player("filler", "other", "RB", 2, 3),
+      player("opp-starter", "other", "QB", 25, 18),
+    ];
+    const result = evaluateTrade({
+      myRoster,
+      opponentRoster,
+      send: [myRoster[2]],
+      receive: [opponentRoster[0], opponentRoster[1]],
+      rosterPositions: ["RB", "BN", "BN"],
+    });
+    expect(result.myImpact.droppedPlayerIds).toEqual(["filler"]);
+    expect(result.myImpact.assetValueDelta).toBe(4);
+    expect(result.myImpact.rosterCapacityAdjustment).toBeLessThanOrEqual(0);
+  });
+
+  it("charges the effective asset change for an existing player displaced by roster limits", () => {
+    const myRoster = [
+      player("starter", "mine", "RB", 25, 15),
+      player("weak-existing", "mine", "WR", 5, 4),
+      player("outgoing", "mine", "TE", 10, 7),
+    ];
+    const opponentRoster = [
+      player("incoming-one", "other", "WR", 14, 10),
+      player("incoming-two", "other", "TE", 12, 9),
+      player("opp-starter", "other", "QB", 25, 18),
+    ];
+    const result = evaluateTrade({
+      myRoster,
+      opponentRoster,
+      send: [myRoster[2]],
+      receive: [opponentRoster[0], opponentRoster[1]],
+      rosterPositions: ["RB", "FLEX", "BN"],
+    });
+    expect(result.myImpact.droppedPlayerIds).toContain("weak-existing");
+    expect(result.myImpact.assetValueDelta).toBe(11);
+    expect(result.myImpact.rosterCapacityAdjustment).toBeLessThan(0);
+  });
+
+  it("values a freed roster slot modestly rather than as another full asset", () => {
+    const result = evaluateTrade({
+      myRoster: mine,
+      opponentRoster: theirs,
+      send: [mine[2], mine[3]],
+      receive: [theirs[2]],
+      rosterPositions: slots,
+    });
+    expect(result.myImpact.freedRosterSlots).toBeGreaterThan(0);
+    expect(result.myImpact.rosterCapacityAdjustment).toBeGreaterThan(0);
+    expect(result.myImpact.rosterCapacityAdjustment).toBeLessThanOrEqual(0.45);
+  });
+
+  it("keeps lineup loss dominant over consolidation credit", () => {
+    const myRoster = [
+      player("elite-qb", "mine", "QB", 40, 25),
+      player("strong-rb", "mine", "RB", 25, 17),
+      player("bench", "mine", "WR", 8, 6),
+    ];
+    const opponentRoster = [
+      player("weak-qb", "other", "QB", 15, 10),
+      player("other", "other", "RB", 10, 8),
+    ];
+    const result = evaluateTrade({
+      myRoster,
+      opponentRoster,
+      send: [myRoster[0], myRoster[2]],
+      receive: [opponentRoster[0]],
+      rosterPositions: ["QB", "RB", "BN"],
+    });
+    expect(result.myImpact.effectiveDelta).toBeLessThan(0);
+    expect(result.myImpact.starterPpgComponent).toBeLessThan(-20);
+  });
+
+  it("applies package complexity only as a modest evaluation adjustment", () => {
+    const oneForOne = evaluateTrade({
+      myRoster: mine,
+      opponentRoster: theirs,
+      send: [mine[1]],
+      receive: [theirs[1]],
+      rosterPositions: slots,
+    });
+    const twoForThree = evaluateTrade({
+      myRoster: [...mine, player("my-filler", "mine", "TE", 1, 1)],
+      opponentRoster: [...theirs, player("opp-filler", "other", "WR", 1, 1), player("opp-filler2", "other", "RB", 1, 1)],
+      send: [mine[1], mine[2]],
+      receive: [theirs[1], player("opp-filler", "other", "WR", 1, 1), player("opp-filler2", "other", "RB", 1, 1)],
+      rosterPositions: slots,
+    });
+    expect(oneForOne.packageComplexityAdjustment).toBe(0);
+    expect(twoForThree.packageComplexityAdjustment).toBeLessThan(0);
+    expect(twoForThree.packageComplexityAdjustment).toBeGreaterThan(-2);
+    expect(twoForThree.scoreComponents).toMatchObject({
+      my: {
+        starterPpgDelta: twoForThree.myImpact.starterPpgDelta,
+        marginalDepthDelta: twoForThree.myImpact.marginalDepthDelta,
+        rosterCapacityAdjustment: twoForThree.myImpact.rosterCapacityAdjustment,
+      },
+      packageComplexityAdjustment: twoForThree.packageComplexityAdjustment,
+      finalTradeFit: twoForThree.finalTradeFit,
+    });
+  });
+
+  it("prefers simpler shapes when quality is similar but preserves a clearly superior package", () => {
+    const makeSuggestion = (sendSize: number, receiveSize: number, score: number): TradeSuggestion => {
+      const send = Array.from({ length: sendSize }, (_, index) => player(`send-${sendSize}-${index}`, "mine", "RB", 10, 8));
+      const receive = Array.from({ length: receiveSize }, (_, index) => player(`receive-${receiveSize}-${index}`, "other", "WR", 10, 8));
+      const evaluated = evaluateTrade({
+        myRoster: [...send, player("my-qb-fixture", "mine", "QB", 20, 18)],
+        opponentRoster: [...receive, player("opp-qb-fixture", "other", "QB", 20, 18)],
+        send,
+        receive,
+        rosterPositions: ["QB", "FLEX", "FLEX", "BN", "BN", "BN"],
+      });
+      return { ...evaluated, opponentTeamId: "other", score };
+    };
+    const similar = diversifyTradeSuggestions([
+      makeSuggestion(2, 3, 100),
+      makeSuggestion(1, 1, 99),
+      makeSuggestion(2, 2, 98.5),
+    ]);
+    expect(similar[0].tradeShape).toBe("1-for-1");
+    expect(similar[1].tradeShape).toBe("2-for-2");
+
+    const clearlySuperior = diversifyTradeSuggestions([
+      makeSuggestion(2, 3, 106),
+      makeSuggestion(1, 1, 99),
+      makeSuggestion(2, 2, 98),
+    ]);
+    expect(clearlySuperior[0].tradeShape).toBe("2-for-3");
+  });
+
+  it("allows a strong 3-for-3 recommendation into the diverse result set", () => {
+    const send = [mine[0], mine[1], mine[2]];
+    const receive = [theirs[0], theirs[1], theirs[2]];
+    const evaluated = evaluateTrade({ myRoster: mine, opponentRoster: theirs, send, receive, rosterPositions: slots });
+    const suggestion: TradeSuggestion = { ...evaluated, opponentTeamId: "other", score: 110 };
+    expect(diversifyTradeSuggestions([suggestion])[0].tradeShape).toBe("3-for-3");
   });
 });

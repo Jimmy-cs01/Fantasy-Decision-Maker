@@ -19,17 +19,26 @@ export interface TeamTradeImpact {
   lineupBefore: number;
   lineupAfter: number;
   starterPpgDelta: number;
+  starterPpgComponent: number;
   depthBefore: number;
   depthAfter: number;
   depthDelta: number;
+  marginalDepthDelta: number;
+  marginalDepthComponent: number;
   assetValueDelta: number;
+  assetValueComponent: number;
   consolidationAdjustment: number;
   positionalNeedAdjustment: number;
+  rosterCapacityAdjustment: number;
+  rosterHoleAdjustment: number;
+  droppedPlayerIds: string[];
+  freedRosterSlots: number;
   completeBefore: boolean;
   completeAfter: boolean;
   promotedStarterIds: string[];
   demotedStarterIds: string[];
   effectiveDelta: number;
+  finalTradeFit: number;
 }
 
 export interface TradeSuggestion {
@@ -44,14 +53,37 @@ export interface TradeSuggestion {
   myImpact: TeamTradeImpact;
   opponentImpact: TeamTradeImpact;
   tradeFairnessScore: number;
+  packageComplexityAdjustment: number;
+  tradeShape: TradeShape;
+  finalTradeFit: number;
+  scoreComponents: {
+    my: TradeFitComponents;
+    opponent: TradeFitComponents;
+    packageComplexityAdjustment: number;
+    finalTradeFit: number;
+  };
   reasons: string[];
   score: number;
 }
 
+export interface TradeFitComponents {
+  starterPpgDelta: number;
+  assetValueDelta: number;
+  marginalDepthDelta: number;
+  consolidationAdjustment: number;
+  positionalNeedAdjustment: number;
+  rosterCapacityAdjustment: number;
+  finalTradeFit: number;
+}
+
+export type TradeShape = "1-for-1" | "2-for-2" | "3-for-3" | "1-for-2" | "2-for-1" | "2-for-3" | "3-for-2" | "other";
+
 export const TRADE_SEARCH_LIMITS = {
   playersPerTeam: 12,
   maxPackageSize: 3,
-  finalistsPerOpponent: 6,
+  threePlayerPool: 8,
+  finalistsPerShape: 2,
+  finalistsPerOpponent: 12,
   maxResults: 20,
   maxResultsPerOpponent: 2,
   valueWindow: 0.28,
@@ -135,13 +167,53 @@ function lineup(roster: TradePlayer[], rosterPositions: string[]) {
   return result;
 }
 
-function depthScore(roster: TradePlayer[], starterIds: string[]) {
+const DEPTH_SLOT_WEIGHTS = [0.11, 0.035, 0.01] as const;
+
+export function calculateMarginalDepthUtility(roster: TradePlayer[], starterIds: string[]) {
   const starters = new Set(starterIds);
-  const weights = [0.2, 0.14, 0.09, 0.06, 0.04, 0.02];
-  return roster.filter((player) => !starters.has(player.id))
-    .sort((left, right) => (right.value ?? 0) - (left.value ?? 0))
-    .slice(0, weights.length)
-    .reduce((total, player, index) => total + (player.value ?? 0) * weights[index], 0);
+  const byPosition = new Map<string, TradePlayer[]>();
+  for (const player of roster.filter((item) => !starters.has(item.id))) {
+    const position = player.position?.toUpperCase() ?? "OTHER";
+    byPosition.set(position, [...(byPosition.get(position) ?? []), player]);
+  }
+  let total = 0;
+  for (const players of byPosition.values()) {
+    players.sort((left, right) => {
+      const ppg = (right.projectedPpg ?? 0) - (left.projectedPpg ?? 0);
+      return ppg || (right.value ?? 0) - (left.value ?? 0) || left.id.localeCompare(right.id);
+    });
+    total += players.slice(0, DEPTH_SLOT_WEIGHTS.length).reduce((positionTotal, player, index) => {
+      const usableProduction = Math.max(0, (player.projectedPpg ?? 0) - 2);
+      const assetSupport = Math.max(0, Math.min(30, player.value ?? 0)) * 0.04;
+      return positionTotal + (usableProduction + assetSupport) * DEPTH_SLOT_WEIGHTS[index];
+    }, 0);
+  }
+  return total;
+}
+
+function rosterCapacity(roster: TradePlayer[], rosterPositions: string[]) {
+  const configured = rosterPositions.filter((slot) => !["IR", "TAXI"].includes(slot.trim().toUpperCase())).length;
+  return Math.max(roster.length, configured);
+}
+
+function dropUtility(player: TradePlayer) {
+  return (player.projectedPpg ?? 0) + (player.value ?? 0) * 0.08;
+}
+
+function enforceRosterCapacity(roster: TradePlayer[], capacity: number, rosterPositions: string[]) {
+  let retained = [...roster];
+  const dropped: TradePlayer[] = [];
+  while (retained.length > capacity) {
+    const currentLineup = lineup(retained, rosterPositions);
+    const starters = new Set(currentLineup.selectedPlayerIds);
+    const droppable = retained.filter((player) => !starters.has(player.id));
+    const pool = droppable.length ? droppable : retained;
+    const weakest = [...pool].sort((left, right) =>
+      dropUtility(left) - dropUtility(right) || left.id.localeCompare(right.id))[0];
+    dropped.push(weakest);
+    retained = retained.filter((player) => player.id !== weakest.id);
+  }
+  return { roster: retained, dropped };
 }
 
 function positionalNeed(roster: TradePlayer[], incoming: TradePlayer[]) {
@@ -170,7 +242,7 @@ function consolidationAdjustment(
   const bestIncoming = Math.max(...incoming.map((player) => player.projectedPpg ?? 0));
   const quality = Math.max(0, bestIncoming - replacementStarter);
   const leagueFactor = clamp(leagueTeams / 12, 0.75, 1.25);
-  return round(clamp(slotsFreed * quality * 0.18 * leagueFactor, 0, 2.5));
+  return round(clamp(slotsFreed * quality * 0.15 * leagueFactor, 0, 2));
 }
 
 function impactForTeam(options: {
@@ -181,38 +253,65 @@ function impactForTeam(options: {
   leagueTeams: number;
 }): TeamTradeImpact {
   const before = lineup(options.roster, options.rosterPositions);
-  const afterRoster = afterTrade(options.roster, options.outgoing, options.incoming);
+  const capacity = rosterCapacity(options.roster, options.rosterPositions);
+  const uncappedAfterRoster = afterTrade(options.roster, options.outgoing, options.incoming);
+  const capacityResult = enforceRosterCapacity(uncappedAfterRoster, capacity, options.rosterPositions);
+  const afterRoster = capacityResult.roster;
   const after = lineup(afterRoster, options.rosterPositions);
   const beforeIds = new Set(before.selectedPlayerIds);
   const afterIds = new Set(after.selectedPlayerIds);
-  const depthBefore = depthScore(options.roster, before.selectedPlayerIds);
-  const depthAfter = depthScore(afterRoster, after.selectedPlayerIds);
-  const assetValueDelta = options.incoming.reduce((sum, player) => sum + (player.value ?? 0), 0)
-    - options.outgoing.reduce((sum, player) => sum + (player.value ?? 0), 0);
+  const depthBefore = calculateMarginalDepthUtility(options.roster, before.selectedPlayerIds);
+  const depthAfter = calculateMarginalDepthUtility(afterRoster, after.selectedPlayerIds);
+  const assetValueDelta = afterRoster.reduce((sum, player) => sum + (player.value ?? 0), 0)
+    - options.roster.reduce((sum, player) => sum + (player.value ?? 0), 0);
   const starterPpgDelta = after.projectedPpg - before.projectedPpg;
   const depthDelta = depthAfter - depthBefore;
+  const retainedIds = new Set(afterRoster.map((player) => player.id));
+  const retainedIncoming = options.incoming.filter((player) => retainedIds.has(player.id));
   const consolidation = consolidationAdjustment(
-    options.roster, options.outgoing, options.incoming, before.selectedPlayerIds, options.leagueTeams,
+    options.roster, options.outgoing, retainedIncoming, before.selectedPlayerIds, options.leagueTeams,
   );
-  const need = positionalNeed(options.roster, options.incoming);
-  const rosterHolePenalty = before.complete && !after.complete ? 10 : 0;
-  const effectiveDelta = starterPpgDelta * 4 + depthDelta * 0.3 + assetValueDelta * 0.08
-    + consolidation + need - rosterHolePenalty;
+  const need = positionalNeed(options.roster, retainedIncoming);
+  const incomingIds = new Set(options.incoming.map((player) => player.id));
+  const displacedExistingValue = capacityResult.dropped
+    .filter((player) => !incomingIds.has(player.id))
+    .reduce((sum, player) => sum + (player.value ?? 0), 0);
+  const freedRosterSlots = Math.max(0, capacity - afterRoster.length);
+  const capacityAdjustment = round(clamp(
+    freedRosterSlots * 0.15 - displacedExistingValue * 0.03,
+    -1.25,
+    0.4,
+  ));
+  const rosterHoleAdjustment = before.complete && !after.complete ? -12 : 0;
+  const starterPpgComponent = starterPpgDelta * 4.5;
+  const marginalDepthComponent = depthDelta * 0.65;
+  const assetValueComponent = clamp(assetValueDelta * 0.1, -7, 7);
+  const effectiveDelta = starterPpgComponent + marginalDepthComponent + assetValueComponent
+    + consolidation + need + capacityAdjustment + rosterHoleAdjustment;
   return {
     lineupBefore: before.projectedPpg,
     lineupAfter: after.projectedPpg,
     starterPpgDelta: round(starterPpgDelta),
+    starterPpgComponent: round(starterPpgComponent),
     depthBefore: round(depthBefore),
     depthAfter: round(depthAfter),
     depthDelta: round(depthDelta),
+    marginalDepthDelta: round(depthDelta),
+    marginalDepthComponent: round(marginalDepthComponent),
     assetValueDelta: round(assetValueDelta),
+    assetValueComponent: round(assetValueComponent),
     consolidationAdjustment: consolidation,
     positionalNeedAdjustment: round(need),
+    rosterCapacityAdjustment: capacityAdjustment,
+    rosterHoleAdjustment,
+    droppedPlayerIds: capacityResult.dropped.map((player) => player.id),
+    freedRosterSlots,
     completeBefore: before.complete,
     completeAfter: after.complete,
     promotedStarterIds: [...afterIds].filter((id) => !beforeIds.has(id)),
     demotedStarterIds: [...beforeIds].filter((id) => !afterIds.has(id)),
     effectiveDelta: round(effectiveDelta),
+    finalTradeFit: round(effectiveDelta),
   };
 }
 
@@ -236,6 +335,21 @@ export function evaluateTrade(options: {
   });
   const fairnessGap = Math.abs(myImpact.effectiveDelta - opponentImpact.effectiveDelta);
   const tradeFairnessScore = round(clamp(100 - fairnessGap * 7, 0, 100));
+  const tradeShape = packageShape(options.send.length, options.receive.length);
+  const packageComplexityAdjustment = packageComplexityAdjustmentFor(tradeShape);
+  const finalTradeFit = round(
+    (myImpact.effectiveDelta + opponentImpact.effectiveDelta) * 0.25
+      + packageComplexityAdjustment,
+  );
+  const components = (impact: TeamTradeImpact): TradeFitComponents => ({
+    starterPpgDelta: impact.starterPpgDelta,
+    assetValueDelta: impact.assetValueDelta,
+    marginalDepthDelta: impact.marginalDepthDelta,
+    consolidationAdjustment: impact.consolidationAdjustment,
+    positionalNeedAdjustment: impact.positionalNeedAdjustment,
+    rosterCapacityAdjustment: impact.rosterCapacityAdjustment,
+    finalTradeFit: impact.finalTradeFit,
+  });
   const reasons: string[] = [];
   if (myImpact.starterPpgDelta > 0.4) reasons.push(`You gain ${myImpact.starterPpgDelta.toFixed(1)} projected starter PPG`);
   if (opponentImpact.starterPpgDelta > 0.4) reasons.push(`Opponent gains ${opponentImpact.starterPpgDelta.toFixed(1)} projected starter PPG`);
@@ -243,19 +357,74 @@ export function evaluateTrade(options: {
   if (opponentImpact.consolidationAdjustment > 0) reasons.push("Opponent consolidates multiple assets into a stronger lineup slot");
   if (myImpact.depthDelta < -0.5) reasons.push("You lose meaningful bench depth");
   if (opponentImpact.depthDelta > 0.5) reasons.push("Opponent gains usable roster depth");
+  if (myImpact.droppedPlayerIds.length) reasons.push(`Roster capacity displaces ${myImpact.droppedPlayerIds.length} player${myImpact.droppedPlayerIds.length === 1 ? "" : "s"}`);
   const opponentIncomingStarters = opponentImpact.promotedStarterIds.filter((id) => options.send.some((player) => player.id === id)).length;
   if (options.send.length > 1 && opponentIncomingStarters < options.send.length) {
     reasons.push(`Only ${opponentIncomingStarters} of ${options.send.length} incoming players enters the opponent lineup`);
   }
   if (!myImpact.completeAfter || !opponentImpact.completeAfter) reasons.push("Trade creates an unfilled starting-lineup slot");
   if (!reasons.length) reasons.push("Comparable roster-adjusted value with limited lineup movement");
-  return { ...totals, send: options.send, receive: options.receive, lineupDelta: myImpact.starterPpgDelta, myImpact, opponentImpact, tradeFairnessScore, reasons: reasons.slice(0, 3) };
+  return {
+    ...totals,
+    send: options.send,
+    receive: options.receive,
+    lineupDelta: myImpact.starterPpgDelta,
+    myImpact,
+    opponentImpact,
+    tradeFairnessScore,
+    packageComplexityAdjustment,
+    tradeShape,
+    finalTradeFit,
+    scoreComponents: {
+      my: components(myImpact),
+      opponent: components(opponentImpact),
+      packageComplexityAdjustment,
+      finalTradeFit,
+    },
+    reasons: reasons.slice(0, 3),
+  };
 }
 
-function supportedPackagePair(sendSize: number, receiveSize: number) {
+export function supportedAutomaticTradeShape(sendSize: number, receiveSize: number) {
   return (sendSize <= 2 && receiveSize <= 2)
     || (sendSize === 2 && receiveSize === 3)
-    || (sendSize === 3 && receiveSize === 2);
+    || (sendSize === 3 && receiveSize === 2)
+    || (sendSize === 3 && receiveSize === 3);
+}
+
+function packageShape(sendSize: number, receiveSize: number): TradeShape {
+  const shape = `${sendSize}-for-${receiveSize}`;
+  return ["1-for-1", "2-for-2", "3-for-3", "1-for-2", "2-for-1", "2-for-3", "3-for-2"].includes(shape)
+    ? shape as TradeShape
+    : "other";
+}
+
+function packageComplexityAdjustmentFor(shape: TradeShape) {
+  const adjustments: Record<TradeShape, number> = {
+    "1-for-1": 0,
+    "2-for-2": -0.05,
+    "3-for-3": -0.25,
+    "1-for-2": -0.45,
+    "2-for-1": -0.45,
+    "2-for-3": -1.25,
+    "3-for-2": -1.25,
+    other: -1.5,
+  };
+  return adjustments[shape];
+}
+
+function shapePriority(shape: TradeShape) {
+  const priorities: Record<TradeShape, number> = {
+    "1-for-1": 0,
+    "2-for-2": 1,
+    "3-for-3": 2,
+    "1-for-2": 3,
+    "2-for-1": 3,
+    "2-for-3": 4,
+    "3-for-2": 4,
+    other: 5,
+  };
+  return priorities[shape];
 }
 
 export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit = TRADE_SEARCH_LIMITS.maxResults) {
@@ -263,14 +432,48 @@ export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit 
   for (const suggestion of [...suggestions].sort((left, right) => right.score - left.score)) {
     groups.set(suggestion.opponentTeamId, [...(groups.get(suggestion.opponentTeamId) ?? []), suggestion]);
   }
+  const selectedByOpponent = new Map<string, TradeSuggestion[]>();
+  for (const [opponentId, group] of groups) {
+    const remaining = [...group];
+    const choices: TradeSuggestion[] = [];
+    while (remaining.length && choices.length < TRADE_SEARCH_LIMITS.maxResultsPerOpponent) {
+      const bestScore = remaining[0].score;
+      const differentShape = choices.length
+        ? remaining.filter((candidate) => !choices.some((selected) => selected.tradeShape === candidate.tradeShape))
+        : remaining;
+      const eligible = differentShape.filter((candidate) => candidate.score >= bestScore - 2.5);
+      const pool = eligible.length ? eligible : remaining.filter((candidate) => candidate.score >= bestScore - 2);
+      const choice = [...(pool.length ? pool : remaining)].sort((left, right) =>
+        shapePriority(left.tradeShape) - shapePriority(right.tradeShape) || right.score - left.score)[0];
+      choices.push(choice);
+      remaining.splice(remaining.indexOf(choice), 1);
+    }
+    selectedByOpponent.set(opponentId, choices);
+  }
   const selected: TradeSuggestion[] = [];
   for (let roundIndex = 0; roundIndex < TRADE_SEARCH_LIMITS.maxResultsPerOpponent; roundIndex += 1) {
-    for (const group of groups.values()) {
+    for (const group of selectedByOpponent.values()) {
       if (selected.length >= limit) return selected;
       if (group[roundIndex]) selected.push(group[roundIndex]);
     }
   }
   return selected;
+}
+
+function boundedCandidatePackages(players: TradePlayer[], requiredPlayerId?: string | null) {
+  const oneAndTwo = tradePackages(players, 2, requiredPlayerId);
+  let threePlayerPool = players.slice(0, TRADE_SEARCH_LIMITS.threePlayerPool);
+  if (requiredPlayerId && !threePlayerPool.some((player) => player.id === requiredPlayerId)) {
+    const required = players.find((player) => player.id === requiredPlayerId);
+    if (required) threePlayerPool = [...threePlayerPool.slice(0, TRADE_SEARCH_LIMITS.threePlayerPool - 1), required];
+  }
+  return [...oneAndTwo, ...tradePackages(threePlayerPool, 3, requiredPlayerId).filter((items) => items.length === 3)];
+}
+
+function retainBestCandidate<T extends { preliminary: number }>(candidates: T[], candidate: T) {
+  candidates.push(candidate);
+  candidates.sort((left, right) => right.preliminary - left.preliminary);
+  if (candidates.length > TRADE_SEARCH_LIMITS.finalistsPerShape) candidates.length = TRADE_SEARCH_LIMITS.finalistsPerShape;
 }
 
 export function findTradeSuggestions(options: {
@@ -285,30 +488,37 @@ export function findTradeSuggestions(options: {
     .filter((player) => (player.value ?? 0) >= 1)
     .sort((left, right) => (right.value ?? 0) - (left.value ?? 0))
     .slice(0, TRADE_SEARCH_LIMITS.playersPerTeam);
-  const outgoingPackages = tradePackages(candidates(options.myRoster), 3, options.specificPlayerId);
+  const outgoingPackages = boundedCandidatePackages(candidates(options.myRoster), options.specificPlayerId);
   const valueWindow = options.valueWindow ?? TRADE_SEARCH_LIMITS.valueWindow;
   const finalists: Array<{ opponentRoster: TradePlayer[]; send: TradePlayer[]; receive: TradePlayer[]; preliminary: number }> = [];
 
   for (const opponentRoster of options.otherRosters) {
-    const incomingPackages = valuedPackages(tradePackages(candidates(opponentRoster), 3));
-    const opponentCandidates: typeof finalists = [];
+    const incomingPackages = valuedPackages(boundedCandidatePackages(candidates(opponentRoster)));
+    const opponentCandidatesByShape = new Map<TradeShape, typeof finalists>();
     const seen = new Set<string>();
     for (const send of outgoingPackages) {
       const sendValue = send.reduce((sum, player) => sum + (player.value ?? 0), 0);
       for (const incoming of closeValuePackages(incomingPackages, sendValue, valueWindow)) {
-        if (!supportedPackagePair(send.length, incoming.players.length)) continue;
+        if (!supportedAutomaticTradeShape(send.length, incoming.players.length)) continue;
         const key = `${send.map((player) => player.id).sort().join("+")}->${incoming.players.map((player) => player.id).sort().join("+")}`;
         if (seen.has(key)) continue;
         seen.add(key);
         const totals = tradeTotals(send, incoming.players);
         if (totals.percentageDifference > valueWindow) continue;
-        opponentCandidates.push({
+        const shape = packageShape(send.length, incoming.players.length);
+        const candidate = {
           opponentRoster, send, receive: incoming.players,
-          preliminary: 100 - totals.percentageDifference * 100 + positionalNeed(options.myRoster, incoming.players),
-        });
+          preliminary: 100 - totals.percentageDifference * 100
+            + positionalNeed(options.myRoster, incoming.players)
+            + positionalNeed(opponentRoster, send)
+            + packageComplexityAdjustmentFor(shape),
+        };
+        const shapeCandidates = opponentCandidatesByShape.get(shape) ?? [];
+        retainBestCandidate(shapeCandidates, candidate);
+        opponentCandidatesByShape.set(shape, shapeCandidates);
       }
     }
-    finalists.push(...opponentCandidates
+    finalists.push(...[...opponentCandidatesByShape.values()].flat()
       .sort((left, right) => right.preliminary - left.preliminary)
       .slice(0, TRADE_SEARCH_LIMITS.finalistsPerOpponent));
   }
@@ -325,7 +535,7 @@ export function findTradeSuggestions(options: {
     return {
       ...evaluation,
       opponentTeamId: candidate.opponentRoster[0]?.teamId ?? "unknown",
-      score: evaluation.tradeFairnessScore + (evaluation.myImpact.effectiveDelta + evaluation.opponentImpact.effectiveDelta) * 0.25,
+      score: evaluation.tradeFairnessScore + evaluation.finalTradeFit,
     };
   }).filter((suggestion) => suggestion.tradeFairnessScore >= 45);
   return diversifyTradeSuggestions(scored, TRADE_SEARCH_LIMITS.maxResults);
