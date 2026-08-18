@@ -9,9 +9,14 @@ import {
   evaluateTrade,
   findTradeSuggestions,
   tradeTotals,
+  type TeamTradeImpact,
   type TradePlayer,
   type TradeSuggestion,
 } from "@/lib/trades/engine";
+import {
+  isTradePlayerSelectionKey,
+  toggleTradePlayerId,
+} from "@/lib/trades/selection";
 
 export interface TradeTeam {
   id: string;
@@ -67,12 +72,7 @@ export function TradeFinder({
     id: string,
     values: string[],
     setter: (values: string[]) => void,
-  ) =>
-    setter(
-      values.includes(id)
-        ? values.filter((value) => value !== id)
-        : [...values, id],
-    );
+  ) => setter(toggleTradePlayerId(values, id));
   const runAuto = () => {
     setIsSearching(true);
     window.setTimeout(() => {
@@ -376,7 +376,7 @@ function RosterSelector({
   );
 }
 
-function TradePlayerRow({
+export function TradePlayerRow({
   player,
   selected,
   onToggle,
@@ -388,19 +388,36 @@ function TradePlayerRow({
   const ppg = player.projectedPpg ?? player.lastSeasonPpg ?? null;
   return (
     <div
-      className={`grid min-h-[3.75rem] w-full grid-cols-[2.35rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2 text-left transition ${selected ? "bg-cyan-400/15 ring-1 ring-cyan-300" : "hover:bg-slate-800/60"}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`}
+      aria-pressed={selected}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (!isTradePlayerSelectionKey(event.key)) return;
+        event.preventDefault();
+        onToggle();
+      }}
+      className={`grid min-h-[3.75rem] w-full cursor-pointer grid-cols-[2.35rem_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-300 ${selected ? "bg-cyan-400/15 ring-1 ring-cyan-300" : "hover:bg-slate-800/60"}`}
     >
-      <button type="button" aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`} aria-pressed={selected} onClick={onToggle} className="rounded-full focus-visible:outline-2 focus-visible:outline-cyan-300">
+      <span aria-hidden="true">
         <PlayerAvatar name={player.name} headshotUrl={player.headshotUrl} />
-      </button>
+      </span>
       <span className="min-w-0">
-        <PlayerLink playerId={player.id} className="block truncate text-sm font-bold text-white">{player.name}</PlayerLink>
+        <PlayerLink
+          playerId={player.id}
+          stopPropagation
+          className="block truncate text-sm font-bold text-white"
+        >
+          {player.name}
+        </PlayerLink>
         <small className="flex items-center gap-1 text-slate-500">
           <PositionBadge position={player.position} />
           {player.nflTeam ?? "FA"}
         </small>
       </span>
-      <button type="button" aria-label={`${selected ? "Remove" : "Add"} ${player.name} ${selected ? "from" : "to"} trade`} aria-pressed={selected} onClick={onToggle} className="grid grid-cols-2 gap-3 rounded text-right tabular-nums focus-visible:outline-2 focus-visible:outline-cyan-300">
+      <span className="grid grid-cols-2 gap-3 text-right tabular-nums">
         <MetricInline label="VALUE" value={player.value} />
         <MetricInline
           label={
@@ -410,7 +427,7 @@ function TradePlayerRow({
           }
           value={ppg}
         />
-      </button>
+      </span>
       {player.opponent ? <span className="col-start-2 -mt-1 block text-[10px] text-slate-500">
         {player.isHome ? "vs" : "@"} {player.opponent}{player.teamImpliedTotal != null ? ` · implied ${player.teamImpliedTotal.toFixed(1)}` : ""}
       </span> : null}
@@ -508,10 +525,12 @@ function TradeSummary({
           missing values display —.
         </p>
       )}
-      {analysis ? <div className="mt-3 grid gap-2 border-t border-slate-800 pt-3 text-xs sm:grid-cols-2">
-        <p>You: <b className="text-cyan-200">{analysis.myImpact.starterPpgDelta >= 0 ? "+" : ""}{analysis.myImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {analysis.myImpact.depthDelta >= 0 ? "+" : ""}{analysis.myImpact.depthDelta.toFixed(1)}</p>
-        <p>Opponent: <b className="text-cyan-200">{analysis.opponentImpact.starterPpgDelta >= 0 ? "+" : ""}{analysis.opponentImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {analysis.opponentImpact.depthDelta >= 0 ? "+" : ""}{analysis.opponentImpact.depthDelta.toFixed(1)}</p>
-      </div> : null}
+      {analysis ? (
+        <LineupImpact
+          myImpact={analysis.myImpact}
+          opponentImpact={analysis.opponentImpact}
+        />
+      ) : null}
     </section>
   );
 }
@@ -574,12 +593,62 @@ function Suggestion({
         />
       </div>
       <TradeDifference sendValue={suggestion.sendValue} receiveValue={suggestion.receiveValue} />
-      <div className="mt-3 grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
-        <p>You: <b className="text-cyan-200">{suggestion.myImpact.starterPpgDelta >= 0 ? "+" : ""}{suggestion.myImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {suggestion.myImpact.depthDelta >= 0 ? "+" : ""}{suggestion.myImpact.depthDelta.toFixed(1)}</p>
-        <p>Opponent: <b className="text-cyan-200">{suggestion.opponentImpact.starterPpgDelta >= 0 ? "+" : ""}{suggestion.opponentImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {suggestion.opponentImpact.depthDelta >= 0 ? "+" : ""}{suggestion.opponentImpact.depthDelta.toFixed(1)}</p>
-      </div>
+      <LineupImpact
+        myImpact={suggestion.myImpact}
+        opponentImpact={suggestion.opponentImpact}
+      />
       <ul className="mt-2 space-y-1 text-xs text-slate-500">{suggestion.reasons.map((reason) => <li key={reason}>• {reason}</li>)}</ul>
     </article>
+  );
+}
+
+function LineupImpact({
+  myImpact,
+  opponentImpact,
+}: {
+  myImpact: TeamTradeImpact;
+  opponentImpact: TeamTradeImpact;
+}) {
+  return (
+    <section className="mt-3 border-t border-slate-800 pt-3">
+      <h4 className="text-[10px] font-black tracking-[0.16em] text-slate-500 uppercase">
+        Lineup impact
+      </h4>
+      <div className="mt-2 grid gap-3 text-xs sm:grid-cols-2">
+        <ImpactSide label="You" impact={myImpact} />
+        <ImpactSide label="Opponent" impact={opponentImpact} />
+      </div>
+    </section>
+  );
+}
+
+function ImpactSide({
+  label,
+  impact,
+}: {
+  label: string;
+  impact: TeamTradeImpact;
+}) {
+  const notes = impact.lineupNotes.slice(0, 4);
+  return (
+    <div className="rounded-lg bg-slate-950/45 p-2.5">
+      <p className="text-slate-400">
+        <b className="text-slate-200">{label}</b>{" "}
+        <span className="text-cyan-200">
+          {impact.starterPpgDelta >= 0 ? "+" : ""}
+          {impact.starterPpgDelta.toFixed(1)} starter PPG
+        </span>{" "}
+        · depth {impact.depthDelta >= 0 ? "+" : ""}
+        {impact.depthDelta.toFixed(1)}
+      </p>
+      <ul className="mt-1.5 space-y-1 text-slate-500">
+        {notes.length ? (
+          notes.map((note) => <li key={note}>• {note}</li>)
+        ) : (
+          <li>• Starting lineup unchanged</li>
+        )}
+      </ul>
+    </div>
   );
 }
 

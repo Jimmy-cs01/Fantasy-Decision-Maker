@@ -1,4 +1,7 @@
-import { optimizeProjectedLineup } from "../player-values/lineup";
+import {
+  optimizeProjectedLineup,
+  type LineupAssignment,
+} from "../player-values/lineup";
 
 export interface TradePlayer {
   id: string;
@@ -38,8 +41,33 @@ export interface TeamTradeImpact {
   completeAfter: boolean;
   promotedStarterIds: string[];
   demotedStarterIds: string[];
+  lineupChanges: LineupChanges;
+  lineupNotes: string[];
   effectiveDelta: number;
   finalTradeFit: number;
+}
+
+export interface LineupChangePlayer {
+  playerId: string;
+  name: string;
+  position: string | null;
+  slot: string | null;
+}
+
+export interface LineupMove extends LineupChangePlayer {
+  fromSlot: string;
+  toSlot: string;
+}
+
+export interface LineupChanges {
+  promoted: LineupChangePlayer[];
+  demoted: LineupChangePlayer[];
+  outgoingStarters: LineupChangePlayer[];
+  incomingStarters: LineupChangePlayer[];
+  benchReplacements: LineupChangePlayer[];
+  incomingBench: LineupChangePlayer[];
+  movedStarters: LineupMove[];
+  unfilledSlots: string[];
 }
 
 export interface TradeSuggestion {
@@ -57,6 +85,9 @@ export interface TradeSuggestion {
   packageComplexityAdjustment: number;
   tradeShape: TradeShape;
   finalTradeFit: number;
+  rawTradeFit: number;
+  recommendationShapeAdjustment?: number;
+  finalRecommendationScore?: number;
   scoreComponents: {
     my: TradeFitComponents;
     opponent: TradeFitComponents;
@@ -88,6 +119,7 @@ export const TRADE_SEARCH_LIMITS = {
   maxResults: 20,
   maxResultsPerOpponent: 2,
   valueWindow: 0.28,
+  shapeDiversityCloseness: 1.5,
 } as const;
 
 const round = (value: number) => Math.round(value * 10) / 10;
@@ -289,6 +321,19 @@ function impactForTeam(options: {
   const assetValueComponent = clamp(assetValueDelta * 0.1, -7, 7);
   const effectiveDelta = starterPpgComponent + marginalDepthComponent + assetValueComponent
     + consolidation + need + capacityAdjustment + rosterHoleAdjustment;
+  const promotedStarterIds = [...afterIds].filter((id) => !beforeIds.has(id));
+  const demotedStarterIds = [...beforeIds].filter((id) => !afterIds.has(id));
+  const lineupChanges = describeLineupChanges({
+    before,
+    after,
+    beforeRoster: options.roster,
+    afterRoster,
+    outgoing: options.outgoing,
+    incoming: retainedIncoming,
+    rosterPositions: options.rosterPositions,
+    promotedStarterIds,
+    demotedStarterIds,
+  });
   return {
     lineupBefore: before.projectedPpg,
     lineupAfter: after.projectedPpg,
@@ -309,11 +354,116 @@ function impactForTeam(options: {
     freedRosterSlots,
     completeBefore: before.complete,
     completeAfter: after.complete,
-    promotedStarterIds: [...afterIds].filter((id) => !beforeIds.has(id)),
-    demotedStarterIds: [...beforeIds].filter((id) => !afterIds.has(id)),
+    promotedStarterIds,
+    demotedStarterIds,
+    lineupChanges,
+    lineupNotes: lineupChangeNotes(lineupChanges),
     effectiveDelta: round(effectiveDelta),
     finalTradeFit: round(effectiveDelta),
   };
+}
+
+function normalizedSlot(slot: string) {
+  const normalized = slot.trim().toUpperCase();
+  if (["SUPER_FLEX", "SUPERFLEX", "SF"].includes(normalized)) return "SUPERFLEX";
+  if (["FLEX", "WRT", "WRRB_FLEX", "REC_FLEX"].includes(normalized)) return "FLEX";
+  return normalized;
+}
+
+function lineupSlotLabel(rosterPositions: string[], slot: string, slotIndex: number) {
+  const normalized = normalizedSlot(slot);
+  const matching = rosterPositions
+    .map((item, index) => ({ item: normalizedSlot(item), index }))
+    .filter((item) => item.item === normalized);
+  if (matching.length <= 1) return normalized;
+  const occurrence = matching.findIndex((item) => item.index === slotIndex) + 1;
+  return `${normalized}${Math.max(1, occurrence)}`;
+}
+
+function describeLineupChanges(options: {
+  before: ReturnType<typeof optimizeProjectedLineup>;
+  after: ReturnType<typeof optimizeProjectedLineup>;
+  beforeRoster: TradePlayer[];
+  afterRoster: TradePlayer[];
+  outgoing: TradePlayer[];
+  incoming: TradePlayer[];
+  rosterPositions: string[];
+  promotedStarterIds: string[];
+  demotedStarterIds: string[];
+}): LineupChanges {
+  const beforePlayers = new Map(options.beforeRoster.map((player) => [player.id, player]));
+  const afterPlayers = new Map(options.afterRoster.map((player) => [player.id, player]));
+  const beforeAssignments = new Map(options.before.assignments.map((assignment) => [assignment.playerId, assignment]));
+  const afterAssignments = new Map(options.after.assignments.map((assignment) => [assignment.playerId, assignment]));
+  const outgoingIds = new Set(options.outgoing.map((player) => player.id));
+  const incomingIds = new Set(options.incoming.map((player) => player.id));
+  const promotedIds = new Set(options.promotedStarterIds);
+  const demotedIds = new Set(options.demotedStarterIds);
+  const changePlayer = (
+    player: TradePlayer,
+    assignment: LineupAssignment | undefined,
+  ): LineupChangePlayer => ({
+    playerId: player.id,
+    name: player.name,
+    position: player.position,
+    slot: assignment
+      ? lineupSlotLabel(options.rosterPositions, assignment.slot, assignment.slotIndex)
+      : null,
+  });
+  const promoted = [...promotedIds]
+    .flatMap((id) => {
+      const player = afterPlayers.get(id);
+      return player ? [changePlayer(player, afterAssignments.get(id))] : [];
+    });
+  const demoted = [...demotedIds]
+    .flatMap((id) => {
+      const player = beforePlayers.get(id);
+      return player ? [changePlayer(player, beforeAssignments.get(id))] : [];
+    });
+  const outgoingStarters = options.outgoing
+    .filter((player) => beforeAssignments.has(player.id))
+    .map((player) => changePlayer(player, beforeAssignments.get(player.id)));
+  const incomingStarters = options.incoming
+    .filter((player) => afterAssignments.has(player.id))
+    .map((player) => changePlayer(player, afterAssignments.get(player.id)));
+  const benchReplacements = promoted.filter((player) => !incomingIds.has(player.playerId));
+  const incomingBench = options.incoming
+    .filter((player) => !afterAssignments.has(player.id))
+    .map((player) => changePlayer(player, undefined));
+  const movedStarters = [...afterAssignments.entries()].flatMap(([playerId, afterAssignment]) => {
+    const beforeAssignment = beforeAssignments.get(playerId);
+    const player = afterPlayers.get(playerId);
+    if (!beforeAssignment || !player || outgoingIds.has(playerId)) return [];
+    const fromSlot = lineupSlotLabel(options.rosterPositions, beforeAssignment.slot, beforeAssignment.slotIndex);
+    const toSlot = lineupSlotLabel(options.rosterPositions, afterAssignment.slot, afterAssignment.slotIndex);
+    return fromSlot === toSlot ? [] : [{ ...changePlayer(player, afterAssignment), fromSlot, toSlot }];
+  });
+  return {
+    promoted,
+    demoted,
+    outgoingStarters,
+    incomingStarters,
+    benchReplacements,
+    incomingBench,
+    movedStarters,
+    unfilledSlots: options.after.unfilledSlots.map((slot) =>
+      lineupSlotLabel(options.rosterPositions, slot.slot, slot.slotIndex)),
+  };
+}
+
+function lineupChangeNotes(changes: LineupChanges) {
+  const notes = [
+    ...changes.unfilledSlots.map((slot) => `No projected starter is available for ${slot}`),
+    ...changes.incomingStarters.map((player) => `${player.name} enters ${player.slot ?? "the starting lineup"}`),
+    ...changes.benchReplacements.map((player) => `${player.name} moves from the bench into ${player.slot ?? "the starting lineup"}`),
+    ...changes.incomingBench.map((player) => `${player.name} remains depth`),
+    ...changes.outgoingStarters.map((player) => `${player.name} leaves ${player.slot ?? "the starting lineup"}`),
+    ...changes.movedStarters.map((player) => `${player.name} moves from ${player.fromSlot} to ${player.toSlot}`),
+    ...changes.demoted
+      .filter((player) => !changes.outgoingStarters.some((outgoing) => outgoing.playerId === player.playerId))
+      .map((player) => `${player.name} moves to the bench`),
+  ];
+  return [...new Set(notes)];
 }
 
 export function evaluateTrade(options: {
@@ -376,6 +526,7 @@ export function evaluateTrade(options: {
     packageComplexityAdjustment,
     tradeShape,
     finalTradeFit,
+    rawTradeFit: finalTradeFit,
     scoreComponents: {
       my: components(myImpact),
       opponent: components(opponentImpact),
@@ -414,42 +565,44 @@ function packageComplexityAdjustmentFor(shape: TradeShape) {
   return adjustments[shape];
 }
 
-function shapePriority(shape: TradeShape) {
-  const priorities: Record<TradeShape, number> = {
-    "1-for-1": 0,
-    "2-for-2": 1,
-    "3-for-3": 2,
-    "1-for-2": 3,
-    "2-for-1": 3,
-    "2-for-3": 4,
-    "3-for-2": 4,
-    other: 5,
-  };
-  return priorities[shape];
-}
-
 export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit = TRADE_SEARCH_LIMITS.maxResults) {
   const groups = new Map<string, TradeSuggestion[]>();
   for (const suggestion of [...suggestions].sort((left, right) => right.score - left.score)) {
     groups.set(suggestion.opponentTeamId, [...(groups.get(suggestion.opponentTeamId) ?? []), suggestion]);
   }
   const selectedByOpponent = new Map<string, TradeSuggestion[]>();
+  const selectedShapeCounts = new Map<TradeShape, number>();
   for (const [opponentId, group] of groups) {
-    const remaining = [...group];
-    const choices: TradeSuggestion[] = [];
-    while (remaining.length && choices.length < TRADE_SEARCH_LIMITS.maxResultsPerOpponent) {
-      const bestScore = remaining[0].score;
-      const differentShape = choices.length
-        ? remaining.filter((candidate) => !choices.some((selected) => selected.tradeShape === candidate.tradeShape))
-        : remaining;
-      const eligible = differentShape.filter((candidate) => candidate.score >= bestScore - 2.5);
-      const pool = eligible.length ? eligible : remaining.filter((candidate) => candidate.score >= bestScore - 2);
-      const choice = [...(pool.length ? pool : remaining)].sort((left, right) =>
-        shapePriority(left.tradeShape) - shapePriority(right.tradeShape) || right.score - left.score)[0];
-      choices.push(choice);
-      remaining.splice(remaining.indexOf(choice), 1);
+    const best = group[0];
+    selectedByOpponent.set(opponentId, [{
+      ...best,
+      recommendationShapeAdjustment: 0,
+      finalRecommendationScore: best.score,
+    }]);
+    selectedShapeCounts.set(best.tradeShape, (selectedShapeCounts.get(best.tradeShape) ?? 0) + 1);
+  }
+  for (const [opponentId, group] of groups) {
+    const choices = selectedByOpponent.get(opponentId)!;
+    const best = choices[0];
+    const remaining = group.slice(1);
+    if (remaining.length && choices.length < TRADE_SEARCH_LIMITS.maxResultsPerOpponent) {
+      const strongestRemaining = remaining[0];
+      const alternateShape = remaining
+        .filter((candidate) =>
+          candidate.tradeShape !== best.tradeShape
+            && candidate.score >= strongestRemaining.score - TRADE_SEARCH_LIMITS.shapeDiversityCloseness)
+        .sort((left, right) =>
+          (selectedShapeCounts.get(left.tradeShape) ?? 0) - (selectedShapeCounts.get(right.tradeShape) ?? 0)
+            || right.score - left.score)[0];
+      const choice = alternateShape ?? strongestRemaining;
+      const recommendationShapeAdjustment = round(Math.max(0, strongestRemaining.score - choice.score));
+      choices.push({
+        ...choice,
+        recommendationShapeAdjustment,
+        finalRecommendationScore: round(choice.score + recommendationShapeAdjustment),
+      });
+      selectedShapeCounts.set(choice.tradeShape, (selectedShapeCounts.get(choice.tradeShape) ?? 0) + 1);
     }
-    selectedByOpponent.set(opponentId, choices);
   }
   const selected: TradeSuggestion[] = [];
   for (let roundIndex = 0; roundIndex < TRADE_SEARCH_LIMITS.maxResultsPerOpponent; roundIndex += 1) {

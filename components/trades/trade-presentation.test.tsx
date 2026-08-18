@@ -10,5 +10,9 @@ describe("trade result presentation", () => {
     expect(component).toContain("starter PPG");
     expect(component).toContain("PROJ PPG");
     expect(component).toContain("<TradePackagePlayer");
+    expect(component).toContain("Lineup impact");
+    expect(component).toContain("impact.lineupNotes.slice(0, 4)");
+    expect(component).toContain('label="You"');
+    expect(component).toContain('label="Opponent"');
   });
 });

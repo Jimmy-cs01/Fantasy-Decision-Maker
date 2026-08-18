@@ -14,4 +14,14 @@ describe("PlayerLink", () => {
     expect(html).not.toContain("href=");
     expect(html).toContain("Unknown Player");
   });
+
+  it("can isolate a profile link from a selectable parent surface", () => {
+    const html = renderToStaticMarkup(
+      <PlayerLink playerId="player-1" stopPropagation>
+        Player One
+      </PlayerLink>,
+    );
+
+    expect(html).toContain('href="/players/player-1"');
+  });
 });

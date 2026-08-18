@@ -440,7 +440,7 @@ describe("Trade Finder", () => {
     });
   });
 
-  it("prefers simpler shapes when quality is similar but preserves a clearly superior package", () => {
+  it("preserves the best trade then prefers a similarly strong different shape", () => {
     const makeSuggestion = (sendSize: number, receiveSize: number, score: number): TradeSuggestion => {
       const send = Array.from({ length: sendSize }, (_, index) => player(`send-${sendSize}-${index}`, "mine", "RB", 10, 8));
       const receive = Array.from({ length: receiveSize }, (_, index) => player(`receive-${receiveSize}-${index}`, "other", "WR", 10, 8));
@@ -454,19 +454,223 @@ describe("Trade Finder", () => {
       return { ...evaluated, opponentTeamId: "other", score };
     };
     const similar = diversifyTradeSuggestions([
-      makeSuggestion(2, 3, 100),
-      makeSuggestion(1, 1, 99),
-      makeSuggestion(2, 2, 98.5),
+      makeSuggestion(1, 1, 9),
+      makeSuggestion(1, 1, 8.8),
+      makeSuggestion(2, 2, 8.5),
     ]);
     expect(similar[0].tradeShape).toBe("1-for-1");
     expect(similar[1].tradeShape).toBe("2-for-2");
+    expect(similar[0].score).toBe(9);
+    expect(similar[1].recommendationShapeAdjustment).toBeCloseTo(0.3);
+    expect(similar[1].finalRecommendationScore).toBeCloseTo(8.8);
 
     const clearlySuperior = diversifyTradeSuggestions([
-      makeSuggestion(2, 3, 106),
-      makeSuggestion(1, 1, 99),
-      makeSuggestion(2, 2, 98),
+      makeSuggestion(1, 1, 9.5),
+      makeSuggestion(1, 1, 8.8),
+      makeSuggestion(2, 2, 6),
     ]);
-    expect(clearlySuperior[0].tradeShape).toBe("2-for-3");
+    expect(clearlySuperior[0].tradeShape).toBe("1-for-1");
+    expect(clearlySuperior[1].tradeShape).toBe("1-for-1");
+  });
+
+  it("uses a good bench replacement instead of treating a traded starter as an empty hole", () => {
+    const starter = player("starter", "mine", "RB", 25, 15);
+    const goodBackup = player("good-backup", "mine", "RB", 15, 13);
+    const opponentAsset = player("opponent-asset", "other", "WR", 25, 12);
+    const result = evaluateTrade({
+      myRoster: [starter, goodBackup],
+      opponentRoster: [opponentAsset],
+      send: [starter],
+      receive: [opponentAsset],
+      rosterPositions: ["RB"],
+    });
+
+    expect(result.myImpact.starterPpgDelta).toBe(-2);
+    expect(result.myImpact.lineupChanges.benchReplacements).toEqual([
+      expect.objectContaining({ playerId: "good-backup", slot: "RB" }),
+    ]);
+    expect(result.myImpact.lineupNotes).toContain(
+      "good-backup moves from the bench into RB",
+    );
+  });
+
+  it("charges a much larger lineup loss when the only bench replacement is weak", () => {
+    const starter = player("starter", "mine", "RB", 25, 15);
+    const weakBackup = player("weak-backup", "mine", "RB", 4, 5);
+    const opponentAsset = player("opponent-asset", "other", "WR", 25, 12);
+    const result = evaluateTrade({
+      myRoster: [starter, weakBackup],
+      opponentRoster: [opponentAsset],
+      send: [starter],
+      receive: [opponentAsset],
+      rosterPositions: ["RB"],
+    });
+
+    expect(result.myImpact.starterPpgDelta).toBe(-10);
+  });
+
+  it("distinguishes an incoming starter from an incoming depth asset", () => {
+    const weakStarter = player("weak-starter", "mine", "RB", 10, 7);
+    const outgoingDepth = player("outgoing-depth", "mine", "WR", 8, 5);
+    const incomingStarter = player("incoming-starter", "other", "RB", 24, 15);
+    const incomingDepth = player("incoming-depth", "other", "RB", 8, 6);
+    const opponentStarter = player("opponent-starter", "other", "WR", 25, 16);
+    const result = evaluateTrade({
+      myRoster: [weakStarter, outgoingDepth],
+      opponentRoster: [incomingStarter, incomingDepth, opponentStarter],
+      send: [weakStarter, outgoingDepth],
+      receive: [incomingStarter, incomingDepth],
+      rosterPositions: ["RB", "BN"],
+    });
+
+    expect(result.myImpact.lineupChanges.incomingStarters).toEqual([
+      expect.objectContaining({ playerId: "incoming-starter", slot: "RB" }),
+    ]);
+    expect(result.myImpact.lineupChanges.incomingBench).toEqual([
+      expect.objectContaining({ playerId: "incoming-depth" }),
+    ]);
+    expect(result.myImpact.lineupNotes).toEqual(
+      expect.arrayContaining([
+        "incoming-starter enters RB",
+        "incoming-depth remains depth",
+      ]),
+    );
+  });
+
+  it("rearranges FLEX and promotes the best legal bench player after a starter leaves", () => {
+    const rbOne = player("a-rb-one", "mine", "RB", 28, 18);
+    const rbTwo = player("b-rb-two", "mine", "RB", 25, 17);
+    const wrOne = player("c-wr-one", "mine", "WR", 24, 16);
+    const benchWr = player("d-bench-wr", "mine", "WR", 14, 10);
+    const opponentTe = player("opponent-te", "other", "TE", 20, 9);
+    const result = evaluateTrade({
+      myRoster: [rbOne, rbTwo, wrOne, benchWr],
+      opponentRoster: [opponentTe],
+      send: [rbOne],
+      receive: [opponentTe],
+      rosterPositions: ["RB", "WR", "FLEX"],
+    });
+
+    expect(result.myImpact.starterPpgDelta).toBe(-8);
+    expect(result.myImpact.lineupChanges.benchReplacements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "d-bench-wr", slot: "FLEX" }),
+      ]),
+    );
+    expect(result.myImpact.lineupChanges.movedStarters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "b-rb-two", toSlot: "RB" }),
+      ]),
+    );
+  });
+
+  it("promotes multiple bench players when a package removes two starters", () => {
+    const rbStarter = player("rb-starter", "mine", "RB", 25, 15);
+    const rbStarterTwo = player("rb-starter-two", "mine", "RB", 24, 14);
+    const wrStarter = player("wr-starter", "mine", "WR", 25, 13);
+    const wrStarterTwo = player("wr-starter-two", "mine", "WR", 24, 12);
+    const rbBackup = player("rb-backup", "mine", "RB", 15, 11);
+    const wrBackup = player("wr-backup", "mine", "WR", 15, 10);
+    const incoming = player("incoming", "other", "TE", 30, 16);
+    const result = evaluateTrade({
+      myRoster: [
+        rbStarter,
+        rbStarterTwo,
+        wrStarter,
+        wrStarterTwo,
+        rbBackup,
+        wrBackup,
+      ],
+      opponentRoster: [incoming],
+      send: [rbStarter, wrStarter],
+      receive: [incoming],
+      rosterPositions: ["RB", "RB", "WR", "WR"],
+    });
+
+    expect(result.myImpact.lineupChanges.benchReplacements.map((item) => item.playerId)).toEqual(
+      expect.arrayContaining(["rb-backup", "wr-backup"]),
+    );
+    expect(result.myImpact.starterPpgDelta).toBe(-7);
+  });
+
+  it("reports the exact unfilled fantasy slot when no legal replacement exists", () => {
+    const quarterback = player("only-qb", "mine", "QB", 30, 20);
+    const incoming = player("incoming-wr", "other", "WR", 25, 15);
+    const result = evaluateTrade({
+      myRoster: [quarterback],
+      opponentRoster: [incoming],
+      send: [quarterback],
+      receive: [incoming],
+      rosterPositions: ["QB"],
+    });
+
+    expect(result.myImpact.lineupChanges.unfilledSlots).toEqual(["QB"]);
+    expect(result.myImpact.lineupNotes).toContain(
+      "No projected starter is available for QB",
+    );
+  });
+
+  it("uses legal skill-position bench promotion when a Superflex quarterback leaves", () => {
+    const qbOne = player("qb-one", "mine", "QB", 30, 20);
+    const qbTwo = player("qb-two", "mine", "QB", 24, 16);
+    const flexStarter = player("flex-starter", "mine", "WR", 20, 14);
+    const incoming = player("incoming-te", "other", "TE", 10, 8);
+    const result = evaluateTrade({
+      myRoster: [qbOne, qbTwo, flexStarter],
+      opponentRoster: [incoming],
+      send: [qbTwo],
+      receive: [incoming],
+      rosterPositions: ["QB", "SUPER_FLEX"],
+    });
+
+    expect(result.myImpact.starterPpgDelta).toBe(-2);
+    expect(result.myImpact.lineupChanges.benchReplacements).toEqual([
+      expect.objectContaining({
+        playerId: "flex-starter",
+        slot: "SUPERFLEX",
+      }),
+    ]);
+  });
+
+  it("removes a promoted bench replacement from post-trade depth utility", () => {
+    const starter = player("starter", "mine", "RB", 25, 15);
+    const backup = player("backup", "mine", "RB", 18, 13);
+    const result = evaluateTrade({
+      myRoster: [starter, backup],
+      opponentRoster: [],
+      send: [starter],
+      receive: [],
+      rosterPositions: ["RB"],
+    });
+
+    expect(result.myImpact.depthBefore).toBeGreaterThan(0);
+    expect(result.myImpact.depthAfter).toBe(0);
+    expect(result.myImpact.lineupChanges.benchReplacements[0]?.playerId).toBe(
+      "backup",
+    );
+  });
+
+  it("builds lineup notes for both teams without duplicate player messages", () => {
+    const myStarter = player("my-starter", "mine", "RB", 25, 15);
+    const myBackup = player("my-backup", "mine", "RB", 15, 13);
+    const myWr = player("my-wr", "mine", "WR", 30, 20);
+    const theirStarter = player("their-starter", "other", "WR", 24, 14);
+    const theirBackup = player("their-backup", "other", "WR", 14, 12);
+    const theirRb = player("their-rb", "other", "RB", 30, 20);
+    const result = evaluateTrade({
+      myRoster: [myStarter, myBackup, myWr],
+      opponentRoster: [theirStarter, theirBackup, theirRb],
+      send: [myStarter],
+      receive: [theirStarter],
+      rosterPositions: ["RB", "WR"],
+    });
+
+    expect(result.myImpact.lineupNotes.length).toBeGreaterThan(0);
+    expect(result.opponentImpact.lineupNotes.length).toBeGreaterThan(0);
+    expect(new Set(result.myImpact.lineupNotes).size).toBe(result.myImpact.lineupNotes.length);
+    expect(new Set(result.opponentImpact.lineupNotes).size).toBe(result.opponentImpact.lineupNotes.length);
+    expect(result.myImpact.lineupChanges.benchReplacements.map((item) => item.playerId)).toContain("my-backup");
+    expect(result.opponentImpact.lineupChanges.benchReplacements.map((item) => item.playerId)).toContain("their-backup");
   });
 
   it("allows a strong 3-for-3 recommendation into the diverse result set", () => {
