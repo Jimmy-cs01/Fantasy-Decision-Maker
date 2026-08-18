@@ -13,7 +13,7 @@ export function AuthFrame({ eyebrow, title, description, children, footer }: {
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(34,211,238,0.14),transparent_35%)]" />
     <div className="relative w-full max-w-md">
       <Link href="/" className="mb-5 inline-flex items-center gap-2 text-xs font-black tracking-[0.18em] text-cyan-300 transition hover:text-cyan-200">
-        <ChartNoAxesCombined size={18} /> JIM&apos;S FANTASY HELPER
+        <ChartNoAxesCombined size={18} /> JIMMY GM
       </Link>
       <section className="rounded-2xl border border-slate-700/80 bg-slate-900/85 p-5 shadow-2xl shadow-slate-950/40 backdrop-blur sm:p-7">
         <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">{eyebrow}</p>
@@ -25,4 +25,3 @@ export function AuthFrame({ eyebrow, title, description, children, footer }: {
     </div>
   </main>;
 }
-

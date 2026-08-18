@@ -11,6 +11,9 @@ import { withLeagueScoring, withLeagueWeeklyScoring } from "@/lib/fantasy/league
 import { getPlayerProjection } from "@/lib/projections/service";
 import { getPlayerValue } from "@/lib/player-values/service";
 import type { ScoringFormat, SeasonType } from "@/lib/players/types";
+import { createClient } from "@/lib/supabase/server";
+import { getWeeklyMatchups, matchupContextByTeam } from "@/lib/nfl/schedule-service";
+import type { MatchupContext } from "@/lib/nfl/types";
 
 const number = (value: unknown) => Number(value ?? 0);
 const display = (value: unknown, digits = 0) => value === null || value === undefined || value === "" ? "—" : number(value).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -42,12 +45,19 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
   else console.error("Unable to load player projection", projectionResult.reason);
   if (valueResult.status === "fulfilled") playerValue = valueResult.value;
   else console.error("Unable to load Player Value", valueResult.reason);
+  let matchup: MatchupContext | null = null;
+  if (projection?.team) {
+    try {
+      const db = await createClient();
+      matchup = matchupContextByTeam(await getWeeklyMatchups(db, projection.season, projection.week)).get(projection.team) ?? null;
+    } catch (error) { console.warn("Player matchup enrichment unavailable", error); }
+  }
   const height = player.height ? `${Math.floor(player.height / 12)}′${player.height % 12}″` : "—";
   const hasPassing = summary && number(summary.pass_attempts) > 0; const hasRushing = summary && number(summary.rush_attempts) > 0; const hasReceiving = summary && number(summary.targets) > 0;
   return <div className="mx-auto max-w-6xl">
     <Link className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white" href={`/players?scoring=${scoring}${selectedLeague ? `&leagueId=${selectedLeague.id}` : ""}`}><ArrowLeft size={16} /> Back to players</Link>
     <header className="mt-5 flex flex-wrap items-start justify-between gap-5"><div><div className="flex items-center gap-3"><h1 className="text-4xl font-black">{player.full_name}</h1><span className="rounded-lg bg-cyan-400/15 px-3 py-1 font-bold text-cyan-200">{position}</span></div><p className="mt-2 text-slate-400">{player.team || "No current team"}{player.sleeper_position && player.sleeper_position !== player.historical_position ? ` · Sleeper ${player.sleeper_position}` : ""}</p><p className="mt-1 text-sm text-slate-500">{player.college || "College unavailable"}{player.rookie_season ? ` · Rookie ${player.rookie_season}` : ""} · {height} / {player.weight ? `${player.weight} lb` : "—"}</p></div>{seasons.length > 0 && <form className="grid grid-cols-3 gap-2"><label className="text-xs text-slate-400">Season<select name="season" defaultValue={season ?? undefined} className="mt-1 block rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white">{seasons.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-xs text-slate-400">Scoring<select name="scoring" defaultValue={scoring} className="mt-1 block rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white">{scoringLeagues.length > 0 && <option value="league">League Scoring</option>}<option value="standard">Standard</option><option value="half_ppr">Half PPR</option><option value="ppr">PPR</option></select></label><label className="text-xs text-slate-400">Type<select name="seasonType" defaultValue={seasonType} className="mt-1 block rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white"><option value="REG">REG</option><option value="POST">POST</option></select></label>{scoringLeagues.length > 0 && <label className="col-span-3 text-xs text-slate-400">Sleeper league<select name="leagueId" defaultValue={selectedLeague?.id} className="mt-1 block w-full rounded-lg border bg-slate-950 px-3 py-2 text-sm text-white">{scoringLeagues.map((league) => <option key={league.id} value={league.id}>{league.name} · {league.season}</option>)}</select></label>}<Button className="col-span-3 py-1.5 text-sm">Update season</Button></form>}</header>
-    {projection && <PlayerProjectionCard projection={projection} position={position} />}
+    {projection && <PlayerProjectionCard projection={projection} position={position} matchup={matchup} />}
     {playerValue && <PlayerValueCard value={playerValue} leagueName={selectedLeague?.name} />}
     {summary ? <>
       <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label={`${SCORING_COLUMNS[scoring].label} PPG`} value={display(summary[scoringConfig.ppg], 1)} accent /><Metric label="Games" value={display(summary.games_played)} /><Metric label="Total Yards" value={display(summary.total_yards)} /><Metric label="Total Touchdowns" value={display(summary.total_touchdowns)} /></section>

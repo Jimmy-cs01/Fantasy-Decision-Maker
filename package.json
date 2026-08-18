@@ -13,6 +13,9 @@
     "data:match": "python3 scripts/match_sleeper_players.py",
     "data:build": "python3 scripts/build_historical_weekly_stats.py",
     "data:schedules": "python3 scripts/download_nflverse_schedules.py",
+    "data:schedules:import:dry-run": "python3 scripts/import_nfl_schedules.py --season 2026 --dry-run",
+    "data:schedules:import": "python3 scripts/import_nfl_schedules.py --season 2026",
+    "data:odds:sync": "vite-node scripts/sync_the_odds_api.ts",
     "data:depth-charts": "python3 scripts/download_nflverse_depth_charts.py",
     "data:depth-charts:import:dry-run": "python3 scripts/import_depth_charts.py --dry-run",
     "data:players": "python3 scripts/download_nflverse_players.py",
@@ -22,6 +25,8 @@
     "projection:train": "python3 scripts/train_projection_model.py --version v2",
     "projection:evaluate": "python3 scripts/evaluate_projection_model.py --version v2",
     "projection:generate": "python3 scripts/generate_weekly_projections.py",
+    "projections:reconcile": "vite-node scripts/reconcile_weekly_projections.ts",
+    "projections:audit": "vite-node scripts/audit_projections.ts",
     "value:calibrate": "python3 scripts/calibrate_player_values.py",
     "value:archetypes": "vite-node scripts/report_player_value_archetypes.ts",
     "trade:benchmark": "vite-node scripts/benchmark_trade_finder.ts"

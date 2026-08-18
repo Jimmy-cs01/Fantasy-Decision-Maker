@@ -35,9 +35,9 @@ export default async function LeaguePage({
     await Promise.all([
       db
         .from("fantasy_teams")
-        .select("id,name,wins,losses,ties,league_member_id,sleeper_roster_id")
+        .select("id,name,wins,losses,ties,league_member_id,sleeper_roster_id,provider_team_id,provider_metadata")
         .eq("league_id", league.id)
-        .order("sleeper_roster_id"),
+        .order("provider_team_id"),
       db
         .from("league_members")
         .select("id,sleeper_user_id,username,display_name")
@@ -63,12 +63,12 @@ export default async function LeaguePage({
     return {
       ...team,
       ownerName: owner?.display_name || owner?.username || null,
-      isMyTeam: team.league_member_id === personalMemberId,
+      isMyTeam: team.league_member_id === personalMemberId || team.provider_metadata?.is_user_team === true,
     };
   });
   const selectedTeam = selectLeagueTeam(
     teams,
-    first(query.teamId) ?? null,
+    first(query.teamId) ?? teams.find((team) => team.isMyTeam)?.id ?? null,
     personalMemberId,
   );
   let analytics: Awaited<ReturnType<typeof getLeagueRosterAnalytics>> | null =
@@ -100,7 +100,7 @@ export default async function LeaguePage({
     {},
   );
   const teamName = (team: (typeof teams)[number]) =>
-    team.name || team.ownerName || `Team ${team.sleeper_roster_id}`;
+    team.name || team.ownerName || `Team ${team.provider_team_id ?? team.sleeper_roster_id ?? "—"}`;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -115,6 +115,7 @@ export default async function LeaguePage({
           <p className="mt-1.5 text-sm text-slate-400">
             {league.season} · {league.season_type ?? "regular"} ·{" "}
             {league.total_rosters ?? teams.length} teams
+            {league.provider ? ` · ${league.provider === "yahoo" ? "Yahoo" : "Sleeper"}` : ""}
           </p>
         </div>
         <form action={syncLeague}>
@@ -182,7 +183,7 @@ export default async function LeaguePage({
             <p className="mt-4 rounded-lg border border-dashed border-slate-700 p-5 text-sm text-slate-400">
               {rosterLoadFailed
                 ? "Roster data is temporarily unavailable. Your synchronized league is still connected; please retry this page."
-                : "No player data was returned for this roster. Sync again after Sleeper data is available."}
+                : `No player data was returned for this roster. Some ${league.provider === "yahoo" ? "Yahoo" : "Sleeper"} identities may still need canonical mapping.`}
             </p>
           )}
         </Card>
@@ -194,7 +195,7 @@ export default async function LeaguePage({
                 <dt className="text-slate-400">Scoring</dt>
                 <dd>
                   {Object.keys(league.scoring_settings ?? {}).length
-                    ? "Sleeper league scoring"
+                    ? `${league.provider === "yahoo" ? "Yahoo" : "Sleeper"} league scoring`
                     : "PPR fallback"}
                 </dd>
               </div>

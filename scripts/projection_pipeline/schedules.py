@@ -8,21 +8,32 @@ SCHEDULE_COLUMNS = [
     "game_id", "season", "game_type", "week", "gameday", "weekday",
     "away_team", "home_team", "location", "away_rest", "home_rest",
 ]
+SCHEDULE_SOURCE_COLUMNS = [*SCHEDULE_COLUMNS, "gametime"]
 
 
 def normalize_schedules(games: pd.DataFrame, start_season: int = 2012) -> pd.DataFrame:
     missing = sorted(set(SCHEDULE_COLUMNS) - set(games.columns))
     if missing:
         raise ValueError(f"nflverse schedule is missing required columns: {missing}")
+    selected_columns = [*SCHEDULE_COLUMNS, *(["gametime"] if "gametime" in games.columns else [])]
     games = games.loc[
         games["season"].ge(start_season) & games["game_type"].isin(["REG", "POST"]),
-        SCHEDULE_COLUMNS,
+        selected_columns,
     ].copy()
     games["gameday"] = pd.to_datetime(games["gameday"], errors="coerce")
     if games[["game_id", "season", "week", "away_team", "home_team"]].isna().any().any():
         raise ValueError("Schedule contains null game identities")
 
-    common = ["game_id", "season", "game_type", "week", "gameday", "weekday", "location"]
+    if "gametime" in games.columns:
+        local_kickoff = pd.to_datetime(
+            games["gameday"].dt.strftime("%Y-%m-%d") + " " + games["gametime"].astype("string"),
+            errors="coerce",
+        ).dt.tz_localize("America/New_York", ambiguous="NaT", nonexistent="shift_forward")
+        games["kickoff"] = local_kickoff.dt.tz_convert("UTC")
+    else:
+        games["kickoff"] = pd.NaT
+
+    common = ["game_id", "season", "game_type", "week", "gameday", "kickoff", "weekday", "location"]
     away = games[common + ["away_team", "home_team", "away_rest"]].rename(columns={
         "away_team": "team", "home_team": "opponent_team", "away_rest": "days_rest",
     })
@@ -40,6 +51,7 @@ def normalize_schedules(games: pd.DataFrame, start_season: int = 2012) -> pd.Dat
     schedule["returning_from_bye"] = schedule["days_rest"].ge(13).astype(int)
     schedule["is_thursday"] = schedule["weekday"].astype("string").str.lower().eq("thursday").astype(int)
     schedule["game_date"] = schedule.pop("gameday").dt.strftime("%Y-%m-%d")
+    schedule["kickoff"] = schedule["kickoff"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     schedule = schedule.drop(columns=["location", "weekday"])
     logical_key = ["season", "week", "season_type", "team"]
     duplicates = schedule.duplicated(logical_key, keep=False)

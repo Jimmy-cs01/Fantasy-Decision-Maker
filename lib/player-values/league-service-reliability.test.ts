@@ -104,6 +104,7 @@ function dependencies(
     }),
     getProjectionHistoryRows: async () => [],
     getCurrentDepthRoles: async () => new Map(),
+    getWeeklyMatchups: async () => [],
     ...overrides,
   };
 }

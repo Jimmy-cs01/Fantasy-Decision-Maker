@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
-const title = "Jim's Fantasy Helper";
+const title = "Jimmy GM";
 const description =
   "Fantasy football statistics, synced league insights, and decision support.";
 

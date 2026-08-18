@@ -22,8 +22,7 @@ export default function Home() {
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-6 sm:px-8 lg:px-10">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-black tracking-[0.18em] text-cyan-300 sm:text-sm">
-            <ChartNoAxesCombined aria-hidden="true" size={20} /> JIM&apos;S
-            FANTASY HELPER
+            <ChartNoAxesCombined aria-hidden="true" size={20} /> JIMMY GM
           </div>
           <Link
             href="/login"
@@ -44,7 +43,7 @@ export default function Home() {
               <span className="text-cyan-300">Clearer decisions.</span>
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-              Bring your Sleeper league, historical NFL performance, and custom
+              Bring your Sleeper or Yahoo league, historical NFL performance, and custom
               scoring into one focused workspace.
             </p>
             <div className="mt-7 grid gap-3 sm:flex">

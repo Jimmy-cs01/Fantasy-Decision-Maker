@@ -43,7 +43,7 @@ export async function getLatestProjectionPool(
     let recordsQuery = db
       .from("player_projections")
       .select(
-        "player_id,season,week,projected_stats,residual_low,residual_high,confidence,players(id,full_name,position,sleeper_position,historical_position,team,headshot_url,sleeper_player_id,birth_date,rookie_season,draft_year,draft_round,draft_pick,draft_status)",
+        "player_id,season,week,projected_stats,model_projection_ppr,final_projection_ppr,projection_diagnostics,residual_low,residual_high,confidence,players(id,full_name,position,sleeper_position,historical_position,team,headshot_url,sleeper_player_id,birth_date,rookie_season,draft_year,draft_round,draft_pick,draft_status)",
       )
       .eq("season", latest.season)
       .eq("week", latest.week)

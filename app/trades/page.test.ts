@@ -23,6 +23,15 @@ describe("Trade Finder route", () => {
     expect(component).not.toContain("<select");
     expect(component).toContain("Search name, position, team");
     expect(component).toContain("aria-pressed={selected}");
+    expect(component).toContain("evaluateTrade");
+    expect(component).toContain("tradeFairnessScore");
+    expect(component).toContain("opponentImpact");
+    expect(component).toContain("new Set(suggestions.map");
+  });
+
+  it("hydrates optional weekly matchup context without changing player value", () => {
+    expect(page).toContain("player.opponent");
+    expect(page).toContain("player.team_implied_total");
   });
 
   it("hydrates projected and prior-season PPG in the shared batched league query", () => {

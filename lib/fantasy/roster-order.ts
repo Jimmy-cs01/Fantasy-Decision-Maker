@@ -53,7 +53,8 @@ export function orderRosterPlayers<T extends OrderedRosterPlayer>(players: T[]) 
 export interface LeagueTeamOption {
   id: string;
   name: string | null;
-  sleeper_roster_id: number;
+  sleeper_roster_id: number | null;
+  provider_team_id?: string | null;
   league_member_id: string | null;
   ownerName?: string | null;
   isMyTeam?: boolean;
@@ -63,4 +64,3 @@ export function selectLeagueTeam<T extends LeagueTeamOption>(teams: T[], request
   const personal = teams.find((team) => team.league_member_id === personalMemberId);
   return teams.find((team) => team.id === requestedTeamId) ?? personal ?? teams[0] ?? null;
 }
-

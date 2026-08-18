@@ -10,14 +10,14 @@ import pandas as pd
 
 if __package__:
     from .projection_pipeline.config import SCHEDULE_OUTPUT_PATH, SCHEDULE_SOURCE_URL
-    from .projection_pipeline.schedules import SCHEDULE_COLUMNS, normalize_schedules
+    from .projection_pipeline.schedules import SCHEDULE_SOURCE_COLUMNS, normalize_schedules
 else:
     from projection_pipeline.config import SCHEDULE_OUTPUT_PATH, SCHEDULE_SOURCE_URL
-    from projection_pipeline.schedules import SCHEDULE_COLUMNS, normalize_schedules
+    from projection_pipeline.schedules import SCHEDULE_SOURCE_COLUMNS, normalize_schedules
 
 
 def download(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "Fantasy-Decision-Maker/1.0"})
+    request = Request(url, headers={"User-Agent": "Jimmy-GM/1.0"})
     with urlopen(request, timeout=90) as response:
         return response.read()
 
@@ -28,8 +28,9 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=SCHEDULE_OUTPUT_PATH)
     parser.add_argument("--start-season", type=int, default=2012)
     args = parser.parse_args()
-    source = pd.read_csv(args.source, usecols=SCHEDULE_COLUMNS) if args.source else pd.read_csv(
-        BytesIO(download(SCHEDULE_SOURCE_URL)), usecols=SCHEDULE_COLUMNS
+    wanted = set(SCHEDULE_SOURCE_COLUMNS)
+    source = pd.read_csv(args.source, usecols=lambda column: column in wanted) if args.source else pd.read_csv(
+        BytesIO(download(SCHEDULE_SOURCE_URL)), usecols=lambda column: column in wanted
     )
     normalized = normalize_schedules(source, args.start_season)
     args.output.parent.mkdir(parents=True, exist_ok=True)

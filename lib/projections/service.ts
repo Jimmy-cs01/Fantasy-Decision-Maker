@@ -24,7 +24,7 @@ export async function getPlayerProjection(
   }
 
   let query = db.from("player_projections")
-    .select("player_id,season,week,season_type,team,opponent_team,projected_stats,model_projection_ppr,vegas_projection_ppr,final_projection_ppr,projected_points_standard,projected_points_half_ppr,projected_points_ppr,residual_low,residual_high,confidence,drivers,model_versions(version)")
+    .select("player_id,season,week,season_type,team,opponent_team,projected_stats,model_projection_ppr,opportunity_adjusted_ppr,vegas_projection_ppr,sleeper_projection_ppr,final_projection_ppr,blend_weight_model,vegas_confidence,opportunity_confidence,sanity_adjustment,outlier_classification,projection_diagnostics,projected_points_standard,projected_points_half_ppr,projected_points_ppr,residual_low,residual_high,confidence,drivers,model_versions(version)")
     .eq("player_id", playerId)
     .eq("season_type", "REG");
   if (options.season) query = query.eq("season", options.season);

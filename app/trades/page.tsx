@@ -114,6 +114,9 @@ export default async function TradesPage({
         value: player.player_value,
         projectedPpg: player.projected_ppg,
         lastSeasonPpg: player.last_season_ppg,
+        opponent: player.opponent,
+        isHome: player.is_home,
+        teamImpliedTotal: player.team_implied_total,
       })),
     };
   });
@@ -145,11 +148,12 @@ export default async function TradesPage({
           teams={tradeTeams}
           rosterPositions={league.roster_positions ?? []}
           analyticsAvailable={analytics.analyticsAvailable}
+          leagueTeams={Number(league.total_rosters ?? teams.length ?? 10)}
         />
       </div>
       <p className="mt-4 text-xs text-slate-500">
-        V1 searches the top 12 rostered assets per team, package sizes up to two
-        players per side, and a configurable 20% value window. It does not
+        Searches the top 12 rostered assets per team, including bounded 2-for-3
+        packages, before simulating both optimized lineups. It does not
         estimate acceptance probability.
       </p>
     </div>

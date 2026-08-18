@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { PlayerAvatar } from "@/components/players/player-avatar";
 import { TeamChoiceStrip } from "@/components/trades/team-choice-strip";
 import {
+  evaluateTrade,
   findTradeSuggestions,
   tradeTotals,
   type TradePlayer,
@@ -24,10 +25,12 @@ export function TradeFinder({
   teams,
   rosterPositions,
   analyticsAvailable,
+  leagueTeams,
 }: {
   teams: TradeTeam[];
   rosterPositions: string[];
   analyticsAvailable: boolean;
+  leagueTeams: number;
 }) {
   const myTeam = teams.find((team) => team.isMyTeam) ?? teams[0];
   const [mode, setMode] = useState<"manual" | "auto">("manual");
@@ -77,6 +80,7 @@ export function TradeFinder({
           myRoster: myTeam?.players ?? [],
           otherRosters,
           rosterPositions,
+          leagueTeams,
           specificPlayerId: autoMode === "specific" ? specificPlayerId : null,
         }),
       );
@@ -135,6 +139,10 @@ export function TradeFinder({
             totals={totals}
             complete={hasCompleteValues}
             analyticsAvailable={analyticsAvailable}
+            myRoster={teamA?.players ?? []}
+            opponentRoster={teamB?.players ?? []}
+            rosterPositions={rosterPositions}
+            leagueTeams={leagueTeams}
           />
         </>
       ) : (
@@ -195,21 +203,22 @@ export function TradeFinder({
                   : "Find Trades for My Roster"}
             </button>
           </section>
-          <div aria-live="polite" className="grid gap-3">
+          <div aria-live="polite" className="grid gap-4">
             {isSearching ? (
               <TradeResultsSkeleton />
             ) : suggestions.length ? (
-              suggestions.map((suggestion) => (
-                <Suggestion
-                  key={`${suggestion.send.map((player) => player.id).join("+")}->${suggestion.receive.map((player) => player.id).join("+")}`}
-                  suggestion={suggestion}
-                  teamName={
-                    teams.find(
-                      (team) => team.id === suggestion.receive[0]?.teamId,
-                    )?.name ?? "League team"
-                  }
-                />
-              ))
+              [...new Set(suggestions.map((suggestion) => suggestion.opponentTeamId))].map((opponentTeamId) => {
+                const teamSuggestions = suggestions.filter((suggestion) => suggestion.opponentTeamId === opponentTeamId);
+                const teamName = teams.find((team) => team.id === opponentTeamId)?.name ?? "League team";
+                return <section key={opponentTeamId} className="space-y-2">
+                  <h3 className="px-1 text-xs font-black tracking-[0.18em] text-cyan-300 uppercase">vs {teamName}</h3>
+                  {teamSuggestions.map((suggestion) => <Suggestion
+                    key={`${suggestion.send.map((player) => player.id).join("+")}->${suggestion.receive.map((player) => player.id).join("+")}`}
+                    suggestion={suggestion}
+                    teamName={teamName}
+                  />)}
+                </section>;
+              })
             ) : (
               <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">
                 {analyticsAvailable
@@ -402,6 +411,9 @@ function TradePlayerRow({
           value={ppg}
         />
       </span>
+      {player.opponent ? <span className="col-start-2 -mt-1 block text-[10px] text-slate-500">
+        {player.isHome ? "vs" : "@"} {player.opponent}{player.teamImpliedTotal != null ? ` · implied ${player.teamImpliedTotal.toFixed(1)}` : ""}
+      </span> : null}
     </button>
   );
 }
@@ -438,14 +450,22 @@ function TradeSummary({
   totals,
   complete,
   analyticsAvailable,
+  myRoster,
+  opponentRoster,
+  rosterPositions,
+  leagueTeams,
 }: {
   send: TradePlayer[];
   receive: TradePlayer[];
   totals: ReturnType<typeof tradeTotals>;
   complete: boolean;
   analyticsAvailable: boolean;
+  myRoster: TradePlayer[];
+  opponentRoster: TradePlayer[];
+  rosterPositions: string[];
+  leagueTeams: number;
 }) {
-  const [analyzed, setAnalyzed] = useState(false);
+  const [analysis, setAnalysis] = useState<ReturnType<typeof evaluateTrade> | null>(null);
   return (
     <section className="sticky bottom-3 z-10 mt-4 rounded-2xl border border-cyan-400/25 bg-slate-950/95 p-4 shadow-2xl backdrop-blur lg:static">
       <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
@@ -467,7 +487,7 @@ function TradeSummary({
           <b className="ml-1 text-white">
             {complete ? Math.abs(totals.difference).toFixed(1) : "—"}
           </b>
-          {analyzed && complete ? (
+          {analysis && complete ? (
             <span className="ml-2 text-cyan-300">
               · {(totals.percentageDifference * 100).toFixed(1)}%
             </span>
@@ -476,10 +496,10 @@ function TradeSummary({
         <button
           type="button"
           disabled={!complete}
-          onClick={() => setAnalyzed(true)}
+          onClick={() => setAnalysis(evaluateTrade({ myRoster, opponentRoster, send, receive, rosterPositions, leagueTeams }))}
           className="rounded-lg bg-cyan-400 px-4 py-2 font-black text-slate-950 disabled:opacity-40"
         >
-          {analyzed ? "Analyzed" : "Analyze Trade"}
+          {analysis ? "Analyzed" : "Analyze Trade"}
         </button>
       </div>
       {!analyticsAvailable && (
@@ -488,6 +508,10 @@ function TradeSummary({
           missing values display —.
         </p>
       )}
+      {analysis ? <div className="mt-3 grid gap-2 border-t border-slate-800 pt-3 text-xs sm:grid-cols-2">
+        <p>You: <b className="text-cyan-200">{analysis.myImpact.starterPpgDelta >= 0 ? "+" : ""}{analysis.myImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {analysis.myImpact.depthDelta >= 0 ? "+" : ""}{analysis.myImpact.depthDelta.toFixed(1)}</p>
+        <p>Opponent: <b className="text-cyan-200">{analysis.opponentImpact.starterPpgDelta >= 0 ? "+" : ""}{analysis.opponentImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {analysis.opponentImpact.depthDelta >= 0 ? "+" : ""}{analysis.opponentImpact.depthDelta.toFixed(1)}</p>
+      </div> : null}
     </section>
   );
 }
@@ -536,8 +560,7 @@ function Suggestion({
       <div className="flex justify-between gap-3">
         <h3 className="font-black">Trade with {teamName}</h3>
         <span className="text-sm font-bold text-cyan-300">
-          Δ {suggestion.difference >= 0 ? "+" : ""}
-          {suggestion.difference.toFixed(1)}
+          Fairness {suggestion.tradeFairnessScore.toFixed(0)}
         </span>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -552,11 +575,11 @@ function Suggestion({
           players={suggestion.receive}
         />
       </div>
-      <p className="mt-2 text-xs text-slate-500">
-        Projected optimal-lineup impact:{" "}
-        {suggestion.lineupDelta >= 0 ? "+" : ""}
-        {suggestion.lineupDelta.toFixed(1)} PPG
-      </p>
+      <div className="mt-3 grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
+        <p>You: <b className="text-cyan-200">{suggestion.myImpact.starterPpgDelta >= 0 ? "+" : ""}{suggestion.myImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {suggestion.myImpact.depthDelta >= 0 ? "+" : ""}{suggestion.myImpact.depthDelta.toFixed(1)}</p>
+        <p>Opponent: <b className="text-cyan-200">{suggestion.opponentImpact.starterPpgDelta >= 0 ? "+" : ""}{suggestion.opponentImpact.starterPpgDelta.toFixed(1)} starter PPG</b> · depth {suggestion.opponentImpact.depthDelta >= 0 ? "+" : ""}{suggestion.opponentImpact.depthDelta.toFixed(1)}</p>
+      </div>
+      <ul className="mt-2 space-y-1 text-xs text-slate-500">{suggestion.reasons.map((reason) => <li key={reason}>• {reason}</li>)}</ul>
     </article>
   );
 }

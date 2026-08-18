@@ -22,6 +22,9 @@ export interface ValueProjectionRecord {
   season: number;
   week: number;
   projected_stats: ProjectedStatLine;
+  final_projection_ppr?: number | null;
+  model_projection_ppr?: number | null;
+  projection_diagnostics?: Record<string, unknown> | null;
   residual_low: number;
   residual_high: number;
   confidence: ProjectionConfidence;
@@ -111,6 +114,8 @@ export function scoreProjectionPool(
       player?.historical_position
     )?.toUpperCase() as FantasyPosition | undefined;
     if (!player || !position || !VALUE_POSITIONS.includes(position)) return [];
+    // projected_stats is the reconciled final component line. Scoring it here
+    // supports custom leagues without adding Vegas or role context twice.
     const modelPpg = calculateProjectedFantasyPoints(
       record.projected_stats,
       scoringSettings,

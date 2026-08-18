@@ -1,6 +1,7 @@
 import { Activity, Gauge, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { ProjectionResponse } from "@/lib/projections/types";
+import type { MatchupContext } from "@/lib/nfl/types";
 
 const labels: Record<string, string> = {
   passAttempts: "Pass Att", completions: "Comp", passingYards: "Pass Yds",
@@ -18,7 +19,7 @@ const statKeys: Record<string, string[]> = {
 
 const value = (input: number) => input.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
-export function PlayerProjectionCard({ projection, position }: { projection: ProjectionResponse; position: string }) {
+export function PlayerProjectionCard({ projection, position, matchup = null }: { projection: ProjectionResponse; position: string; matchup?: MatchupContext | null }) {
   const visibleStats = (statKeys[position] ?? Object.keys(projection.stats))
     .filter((key) => projection.stats[key] !== undefined && (projection.stats[key] !== 0 || ["interceptionsThrown", "rushingTouchdowns", "receivingTouchdowns"].includes(key)));
   return <Card className="mt-7 overflow-hidden border-cyan-400/20 bg-gradient-to-br from-cyan-400/[0.08] to-slate-950">
@@ -34,8 +35,8 @@ export function PlayerProjectionCard({ projection, position }: { projection: Pro
     </div>
     <div className="mt-5 grid gap-5 border-t border-slate-800/80 pt-5 lg:grid-cols-[1.4fr_1fr]">
       <div><h2 className="flex items-center gap-2 text-sm font-bold"><Activity size={15} className="text-cyan-300" /> Projected stat line</h2><dl className="mt-3 grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-4">{visibleStats.map((key) => <div key={key}><dt className="text-[10px] font-bold uppercase text-slate-500">{labels[key] ?? key}</dt><dd className="mt-0.5 font-bold">{value(projection.stats[key])}</dd></div>)}</dl></div>
-      <div><h2 className="flex items-center gap-2 text-sm font-bold"><Gauge size={15} className="text-cyan-300" /> Why</h2><ul className="mt-3 space-y-2 text-sm text-slate-300">{projection.drivers.map((driver) => <li key={driver} className="flex gap-2"><span className="text-cyan-300">•</span><span>{driver}</span></li>)}</ul><p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Confidence: <span className="text-slate-300">{projection.confidence}</span></p>{projection.vegasProjection !== null && <p className="mt-2 text-xs text-slate-500">Model {projection.modelProjection?.toFixed(1)} · Market {projection.vegasProjection.toFixed(1)}</p>}</div>
+      <div><h2 className="flex items-center gap-2 text-sm font-bold"><Gauge size={15} className="text-cyan-300" /> Why</h2><ul className="mt-3 space-y-2 text-sm text-slate-300">{projection.drivers.map((driver) => <li key={driver} className="flex gap-2"><span className="text-cyan-300">•</span><span>{driver}</span></li>)}</ul><p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">Confidence: <span className="text-slate-300">{projection.confidence}</span></p>{projection.vegasProjection !== null && <p className="mt-2 text-xs text-slate-500">Model {projection.modelProjection?.toFixed(1)} · Market {projection.vegasProjection.toFixed(1)} · Jimmy GM {projection.projectedPoints.toFixed(1)}</p>}{process.env.NODE_ENV !== "production" && projection.diagnostics ? <details className="mt-3 rounded-lg border border-slate-800 p-2 text-xs text-slate-400"><summary className="cursor-pointer font-bold text-slate-300">Projection diagnostics</summary><pre className="mt-2 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(projection.diagnostics, null, 2)}</pre></details> : null}</div>
     </div>
+    {matchup ? <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-800 pt-3 text-xs text-slate-400"><b className="text-cyan-200">{matchup.isHome ? "vs" : "@"} {matchup.opponent}</b><span>Team implied {matchup.teamImpliedTotal?.toFixed(1) ?? "—"}</span><span>Total {matchup.gameTotal?.toFixed(1) ?? "—"}</span><span>{matchup.spread == null ? "Spread —" : `${projection.team} ${matchup.spread > 0 ? "+" : ""}${matchup.spread.toFixed(1)}`}</span></div> : null}
   </Card>;
 }
-

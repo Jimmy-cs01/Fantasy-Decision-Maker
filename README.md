@@ -1,12 +1,12 @@
-# Jim's Fantasy Helper
+# Jimmy GM
 
-A personal fantasy football analytics foundation built around Sleeper leagues. It imports a private copy of a user's league data, displays a roster-first dashboard, and leaves clear seams for weekly NFL data and future decision-support features.
+A personal fantasy football analytics foundation for Sleeper and Yahoo leagues. It imports a private copy of a user's league data, displays a roster-first dashboard, and leaves clear seams for weekly NFL data and future decision-support features.
 
 ## Tech stack
 
 - Next.js App Router, React, TypeScript, Tailwind CSS
 - Supabase Auth and PostgreSQL
-- Sleeper's public API, accessed only from server code
+- Sleeper's public API and Yahoo's official Fantasy Sports API, accessed only from server code
 - ESLint, Prettier, and Vitest
 
 ## Local setup
@@ -28,6 +28,11 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_SITE_URL=https://jimmygm.com # production; use localhost in .env.local
 SUPABASE_SERVICE_ROLE_KEY= # server/admin importer only; never expose to browser code
+ODDS_API_KEY= # optional server-only The Odds API key; never expose to browser code
+YAHOO_CLIENT_ID= # server-only Yahoo application client ID
+YAHOO_CLIENT_SECRET= # server-only Yahoo application secret
+YAHOO_REDIRECT_URI=http://localhost:3000/api/yahoo/callback
+YAHOO_TOKEN_ENCRYPTION_KEY= # 32 random bytes as hex or base64
 ```
 
 The app uses the public URL, anon key, and one centralized canonical site origin. The historical importer additionally needs the service-role key. Never place a service-role key in a `NEXT_PUBLIC_` variable or print/commit it. Production deployment, DNS, Supabase Auth, and Resend SMTP instructions are in [`docs/production-deployment.md`](docs/production-deployment.md).
@@ -36,7 +41,7 @@ The app uses the public URL, anon key, and one centralized canonical site origin
 
 `https://jimmygm.com` is the canonical production URL. Metadata, confirmation links, recovery links, and callback redirects all derive from `NEXT_PUBLIC_SITE_URL`; `www.jimmygm.com` is redirect-only. `/auth/callback` exchanges Supabase PKCE codes and accepts only internal return paths. `/auth` remains a compatibility redirect to the dedicated `/login` route.
 
-Supabase Auth owns confirmation and password-recovery tokens. Resend is configured only as Supabase Custom SMTP with the intended sender `Jim's Fantasy Helper <no-reply@jimmygm.com>`; the application has no Resend SDK or API key.
+Supabase Auth owns confirmation and password-recovery tokens. Resend is configured only as Supabase Custom SMTP with the intended sender `Jimmy GM <no-reply@jimmygm.com>`; the application has no Resend SDK or API key.
 
 ## Database and Supabase setup
 
@@ -52,6 +57,17 @@ The `/dashboard/connect` flow validates a Sleeper username on the server, displa
 
 Matchups and transactions are available through the client but intentionally are not imported yet—there is no dashboard use for them in this first version.
 
+## Yahoo Fantasy integration
+
+Yahoo support is a read-only provider adapter: OAuth discovers NFL leagues, then
+imports league settings, teams, managers, roster slots, and conservatively mapped
+canonical players. Tokens are encrypted with AES-256-GCM before the service-role-
+only `yahoo_accounts` table stores them. Unknown Yahoo scoring rules are preserved
+for audit, and ambiguous player identities remain unmapped rather than being
+silently merged. Register **Jimmy GM** in Yahoo's Sports Developer portal with
+`http://localhost:3000/api/yahoo/callback` locally and
+`https://jimmygm.com/api/yahoo/callback` in production.
+
 ## Project structure
 
 ```text
@@ -59,6 +75,7 @@ app/                 Routes, server actions, and dashboard UI
 components/          Reusable dashboard and UI components
 lib/db/              Persistence and synchronization orchestration
 lib/sleeper/         Sleeper HTTP client, API types, normalization
+lib/yahoo/           Yahoo OAuth, provider adapter, normalization
 lib/nfl/             Provider interface and mock implementation
 lib/fantasy/         Scoring plus analytics extension points
 supabase/migrations/ PostgreSQL schema and RLS policies
@@ -170,11 +187,39 @@ python3 scripts/import_player_projections.py --version v2
 
 The database stores projected football stats, not only a universal PPR number. Standard, Half PPR, PPR, and supported custom Sleeper rates are applied at read time through the same centralized league-scoring rules used elsewhere in the app. Unsupported Sleeper bonuses remain a documented scoring limitation rather than being approximated. Floor and ceiling use 20th/80th-percentile 2023 residuals conditioned on projected scoring range. Independently modeled stat components are scaled together to the direct PPR target, retaining their ratios for custom scoring without creating a contradictory fantasy total.
 
-### Vegas-ready architecture
+The V2 arbitration layer retains `model_projection_ppr`, gates its component
+volume using current team/depth opportunity, independently converts supported
+consensus player props using league scoring, and writes a reconciled
+`final_projection_ppr`. Fresh, multi-book player props receive roughly 40–65%
+market weight; game-only context receives 5–20%; unavailable or stale evidence
+receives zero. Player Value and Trade Finder consume the reconciled component
+line, so Vegas is never added a second time. Audit locally with
+`npm run projections:audit`; remote reconciliation is dry-run by default.
 
-`OddsProvider` is provider- and sportsbook-neutral, and the new `odds_games` / `player_props` tables can retain timestamped market snapshots. The no-op provider keeps local development free. No sportsbook is scraped and no paid API is required. When historical odds become available, statistical/market blend weights should be learned by chronological backtesting rather than hardcoded.
+### Schedule, matchup, and odds pipeline
 
-The 2026 schedule/opponents are automatic, and current nflverse/ESPN depth roles can be refreshed independently. Injuries, newly completed 2026 nflverse weeks, odds, and player props remain future inputs.
+The official nflverse schedule is the canonical game source. It is normalized locally, then imported as one database row per game. `/matchups` joins that schedule to optional consensus odds and links each team to its current depth chart; `/depth-charts` exposes the same canonical player identities directly. Missing odds or depth data renders as `—` and never blocks the schedule, roster, projection, or trade experience.
+
+```bash
+npm run data:schedules
+npm run data:schedules:import:dry-run
+npm run data:schedules:import
+```
+
+The Odds API v4 integration is server-only and sportsbook-neutral. Featured sync requests only NFL `h2h`, `spreads`, and `totals` for the US region using American odds. Each sportsbook snapshot is retained, while `odds_games_consensus` derives the median spread, total, moneylines, and implied team totals from the latest snapshot per book. Missing markets remain null. The API quota response headers are logged after every request.
+
+```bash
+# Requires ODDS_API_KEY and the server-only Supabase service-role key.
+# Dry-run prevents database writes but still consumes Odds API quota.
+npm run data:odds:sync -- --season 2026 --week 1 --dry-run
+npm run data:odds:sync -- --season 2026 --week 1
+
+# Player props are deliberately opt-in and event-scoped because they consume
+# additional quota. Omit --event-ids to use every mapped event for that week.
+npm run data:odds:sync -- --season 2026 --week 1 --props --event-ids EVENT_ID
+```
+
+Supported opt-in prop markets are passing/rushing/receiving yards, passing touchdowns, receptions, pass attempts/completions/interceptions, and anytime touchdowns. Player names are normalized conservatively; ambiguous or unmatched names are skipped rather than guessed. The app does not scrape sportsbooks, embed an API key in browser code, or fabricate historical odds. Blend weights and outlier diagnostics are centralized in the projection arbitration service and remain configurable for later chronological backtesting.
 
 ## Player Value and team strength
 
@@ -232,7 +277,7 @@ python3 scripts/import_depth_charts.py
 python3 scripts/import_player_draft_capital.py
 ```
 
-The `/trades` route reuses synchronized roster ownership and league-scored values. Manual mode uses locally filtered, selectable roster rows and supports multi-player packages without a request per click. Automatic mode searches 1-for-1 through 2-for-2 packages among the top 12 meaningful assets per team. Packages are sorted and range-pruned at a 20% value window before expensive lineup analysis; only the best 80 preliminary candidates receive optimal-lineup scoring, equivalent packages are removed, and the top 20 render. It is a decision aid, not an acceptance-probability model. Run `npm run trade:benchmark` for the reproducible synthetic 10-team timing comparison.
+The `/trades` route reuses synchronized roster ownership and league-scored values. Manual mode uses locally filtered, selectable roster rows and performs analysis only when requested. Automatic mode considers bounded 1-for-1, 2-for-1, 1-for-2, 2-for-2, 2-for-3, and 3-for-2 packages among each team's top 12 meaningful assets. It range-prunes by summed value before running the exact lineup optimizer for both teams, then evaluates starter PPG change, bench-depth change, asset value, positional need, and a bounded consolidation benefit. Roster holes are penalized, equivalent packages are removed, only six preliminary candidates per opponent receive expensive simulation, and results are diversified to at most two suggestions per opponent (20 total). Depth charts and matchup enrichment remain optional. It is an explainable decision aid, not an acceptance-probability model. Run `npm run trade:benchmark` for the reproducible representative-league timing comparison.
 
 Run the reproducible historical/current calibration report with:
 

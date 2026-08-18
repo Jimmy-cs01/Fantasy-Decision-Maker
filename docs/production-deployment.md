@@ -4,7 +4,7 @@ The canonical production origin is `https://jimmygm.com`. `www.jimmygm.com` is a
 
 ## 1. Vercel project and domain setup
 
-1. Open Vercel, select the Jim's Fantasy Helper project, then open **Settings → Domains**.
+1. Open Vercel, select the Jimmy GM project, then open **Settings → Domains**.
 2. Add `jimmygm.com` and `www.jimmygm.com`.
 3. For each domain, use the exact **A**, **CNAME**, or ownership **TXT** record Vercel displays. Do not substitute a remembered or generic Vercel target.
 4. In Namecheap, open **Domain List → Manage jimmygm.com → Advanced DNS**. Under **Host Records**, add the exact Vercel records:
@@ -62,7 +62,7 @@ Open **Supabase → Authentication → Emails → SMTP Settings** (the dashboard
 
 ```text
 Sender email: no-reply@jimmygm.com
-Sender name: Jim's Fantasy Helper
+Sender name: Jimmy GM
 Host: smtp.resend.com
 Port: 465
 Username: resend

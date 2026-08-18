@@ -15,6 +15,7 @@ import { optimizeProjectedLineup } from "./lineup";
 import { calculateLeagueSeasonPoints } from "../fantasy/league-scoring";
 import type { CombinedPlayerValue, ValueLeagueConfig } from "./types";
 import { analyticsErrorDetails, optionalQuery } from "./optional-query";
+import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -35,6 +36,9 @@ export interface LeagueAnalyticsPlayer {
   overall_rank: number | null;
   value_tier: string | null;
   confidence: string | null;
+  opponent: string | null;
+  is_home: boolean | null;
+  team_implied_total: number | null;
 }
 
 export interface TeamProjectionSummary {
@@ -84,12 +88,14 @@ export interface LeagueAnalyticsDependencies {
   getLatestProjectionPool: typeof getLatestProjectionPool;
   getProjectionHistoryRows: typeof getProjectionHistoryRows;
   getCurrentDepthRoles: typeof getCurrentDepthRoles;
+  getWeeklyMatchups?: typeof getWeeklyMatchups;
 }
 
 const DEFAULT_DEPENDENCIES: LeagueAnalyticsDependencies = {
   getLatestProjectionPool,
   getProjectionHistoryRows,
   getCurrentDepthRoles,
+  getWeeklyMatchups,
 };
 
 export async function getLeagueRosterAnalytics(
@@ -148,7 +154,7 @@ export async function getLeagueRosterAnalytics(
     ),
   ];
   const playerIds = latest ? rosteredPlayerIds : [];
-  const [history, depthRoles] = latest
+  const [history, depthRoles, matchups] = latest
     ? await Promise.all([
         optionalQuery({
           label: "League projection history lookup failed",
@@ -174,8 +180,15 @@ export async function getLeagueRosterAnalytics(
               leagueId: league.id,
             }),
         }),
+        optionalQuery({
+          label: "League matchup context lookup failed",
+          fallback: [],
+          metadata: { source: "Supabase/nfl_games+odds_games_consensus", leagueId: league.id, season: latest.season, week: latest.week },
+          query: async () => (dependencies.getWeeklyMatchups ?? getWeeklyMatchups)(db, latest.season, latest.week),
+        }),
       ])
-    : [[], new Map()];
+    : [[], new Map(), []];
+  const matchupByTeam = matchupContextByTeam(matchups);
   let valueContexts = null;
   if (latest) {
     try {
@@ -239,6 +252,7 @@ export async function getLeagueRosterAnalytics(
           entry.is_starter &&
           (!storedSlot || ["STARTER", "BN", "BENCH"].includes(storedSlot));
         const playerValue = values.get(identity.id)?.league;
+        const matchup = identity.team ? matchupByTeam.get(identity.team) : null;
         return [
           {
             ...identity,
@@ -256,6 +270,9 @@ export async function getLeagueRosterAnalytics(
             overall_rank: playerValue?.overallRank ?? null,
             value_tier: playerValue?.tier ?? null,
             confidence: playerValue?.confidence ?? null,
+            opponent: matchup?.opponent ?? null,
+            is_home: matchup?.isHome ?? null,
+            team_implied_total: matchup?.teamImpliedTotal ?? null,
           },
         ];
       },
