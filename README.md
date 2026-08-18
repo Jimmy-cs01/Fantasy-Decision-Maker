@@ -196,6 +196,56 @@ receives zero. Player Value and Trade Finder consume the reconciled component
 line, so Vegas is never added a second time. Audit locally with
 `npm run projections:audit`; remote reconciliation is dry-run by default.
 
+### Experimental Model v3 (nflverse play-by-play)
+
+Model v3 is an additive, local experiment; it does not replace v2 or write
+production projections. Official season-scoped
+[nflverse PBP releases](https://github.com/nflverse/nflverse-data/releases/tag/pbp)
+are cached as compressed CSV under ignored `data/raw/pbp/` paths and processed
+one season at a time. Only the required source columns are read. Raw plays are
+reduced to one compact player-game row before model features are built, so the
+production database does not receive millions of play rows.
+
+The versioned `pbp_features_v1` layer covers 2018–2025 and derives position-aware
+opportunity context: rush/target/backfield shares, air-yards share, red-zone,
+inside-10, inside-5 and goal-line work, third-down and two-minute use, leading /
+trailing / neutral-script volume, EPA and success, explosive/stuffed rates,
+dropbacks, CPOE, sack rate, team play volume, pass rate, and neutral pass rate.
+Neutral script is centrally defined as an absolute pre-play score differential
+of eight or fewer points in regulation; goal-line work is at the opponent two
+yard line or closer. Unavailable fields such as public yards-after-contact are
+not fabricated.
+
+Every advanced feature used for Week N is shifted: season-to-date and rolling
+3/5/8-game values contain only earlier games. Player IDs and game IDs are join
+keys only and are rejected from model features. QB, RB, WR, and TE retain
+separate feature contracts and separate XGBoost component/direct-PPR models.
+Training is chronological (2018–2023 train, 2024 validation, 2025 test), with a
+fixed seed and saved manifest containing feature version, hyperparameters,
+component metrics, role-change/TD-regression/established-player slices, and
+feature importance. Current Vegas and player props remain independent
+post-model arbitration inputs and are not trained into v3.
+
+Run the complete local experiment with:
+
+```bash
+npm run data:pbp
+npm run model:v3:advanced
+npm run model:v3:features
+npm run model:v3:data-report
+npm run model:v3:train
+npm run model:v3:compare
+npm run projections:v3 -- --season 2026 --week 1
+npm run model:v3:sanity
+```
+
+Generated PBP, weekly aggregates, feature audits, models, comparisons, and
+projections are ignored reproducible artifacts. The v3 generator always writes
+`player_projections_v3.csv`, refuses v1/v2 versions, performs no remote import,
+and labels the model experimental. Promotion requires a held-out improvement;
+more features alone are not considered sufficient. No database migration or
+Supabase import is required for this experimental phase.
+
 ### Schedule, matchup, and odds pipeline
 
 The official nflverse schedule is the canonical game source. It is normalized locally, then imported as one database row per game. `/matchups` joins that schedule to optional consensus odds and links each team to its current depth chart; `/depth-charts` exposes the same canonical player identities directly. Missing odds or depth data renders as `—` and never blocks the schedule, roster, projection, or trade experience.
