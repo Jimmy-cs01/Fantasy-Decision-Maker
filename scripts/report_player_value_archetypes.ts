@@ -81,7 +81,10 @@ console.table(
     const value = calculatePlayerValue(player, profile, 17);
     return {
       archetype: player.fullName,
-      value: value.value,
+      fundamental: value.fundamentalValue,
+      production: value.productionValue,
+      futureContext: value.futureAssetAdjustment,
+      market: value.marketValue ?? "—",
       floor: value.floorValue,
       ceiling: value.ceilingValue,
       opportunityConfidence: value.opportunityConfidence,

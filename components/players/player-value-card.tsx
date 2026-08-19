@@ -52,6 +52,31 @@ export function PlayerValueCard({
       </div>
       <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-800 pt-3 text-xs text-slate-400">
         <span>
+          Production{" "}
+          <b className="text-slate-200">{preferred.productionValue.toFixed(1)}</b>
+        </span>
+        <span>
+          Future context{" "}
+          <b className="text-slate-200">
+            {preferred.futureAssetAdjustment > 0 ? "+" : ""}
+            {preferred.futureAssetAdjustment.toFixed(1)}
+          </b>
+        </span>
+        {preferred.marketValue != null && (
+          <>
+            <span>
+              Market <b className="text-slate-200">{preferred.marketValue.toFixed(1)}</b>
+            </span>
+            <span>
+              Jimmy edge{" "}
+              <b className="text-slate-200">
+                {(preferred.jimmyEdge ?? 0) > 0 ? "+" : ""}
+                {(preferred.jimmyEdge ?? 0).toFixed(1)}
+              </b>
+            </span>
+          </>
+        )}
+        <span>
           Floor{" "}
           <b className="text-slate-200">{preferred.floorValue.toFixed(1)}</b>
         </span>

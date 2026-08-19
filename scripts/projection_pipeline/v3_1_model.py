@@ -384,6 +384,7 @@ def coherent_components(
     refill_week_one_only: bool = False,
     current_qb_depth_gate: bool = False,
     robust_week_one_context: bool = False,
+    passing_hierarchy_fn=None,
 ) -> tuple[list[dict[str, float]], pd.DataFrame]:
     arbitrated: list[dict[str, float]] = []
     for (_, row), raw in zip(frame.reset_index(drop=True).iterrows(), raw_predictions, strict=True):
@@ -402,6 +403,10 @@ def coherent_components(
         current_qb_depth_gate=current_qb_depth_gate,
         robust_week_one_context=robust_week_one_context,
     )
+    if passing_hierarchy_fn is not None:
+        arbitrated, audit = passing_hierarchy_fn(
+            frame.reset_index(drop=True), arbitrated, audit, role_confidence_fn,
+        )
     arbitrated, audit = derive_and_normalize_red_zone(
         frame,
         arbitrated,
@@ -537,6 +542,7 @@ def predict_coherent_candidate(
     refill_week_one_only: bool = False,
     current_qb_depth_gate: bool = False,
     robust_week_one_context: bool = False,
+    passing_hierarchy_fn=None,
 ) -> CandidateOutput:
     indexed = frame.reset_index(drop=True)
     raw_rows: list[dict[str, float] | None] = [None] * len(indexed)
@@ -558,6 +564,7 @@ def predict_coherent_candidate(
         refill_week_one_only=refill_week_one_only,
         current_qb_depth_gate=current_qb_depth_gate,
         robust_week_one_context=robust_week_one_context,
+        passing_hierarchy_fn=passing_hierarchy_fn,
     )
     components = component_ppr(
         {name: np.array([item.get(name, 0.0) for item in coherent]) for name in set().union(*(item.keys() for item in coherent))},

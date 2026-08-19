@@ -70,6 +70,16 @@ export interface PlayerValueResult {
   fullName: string;
   position: FantasyPosition;
   value: number;
+  /** Current/ROS football production translated through league replacement. */
+  productionValue: number;
+  /** Jimmy's projection-led value including future/role context. */
+  fundamentalValue: number;
+  /** Increment from age, draft, role runway, and proven historical ceiling. */
+  futureAssetAdjustment: number;
+  /** Reserved for an independently sourced market signal; null is not zero. */
+  marketValue: number | null;
+  /** Fundamental minus market when an independent market signal exists. */
+  jimmyEdge: number | null;
   tier: string;
   projectedPpg: number;
   replacementPpg: number;

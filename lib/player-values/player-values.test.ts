@@ -63,6 +63,38 @@ describe("Player Value foundation", () => {
     expect(normalizePlayerValue(450)).toBeLessThan(55);
   });
 
+  it("keeps production, future context, and independent market value conceptually separate", () => {
+    const result = calculatePlayerValue(
+      {
+        ...player("young-rb", "RB", 14),
+        season: 2026,
+        birthDate: "2003-01-01",
+        draftStatus: "drafted",
+        draftRound: 1,
+        depthPosition: "RB",
+        depthRank: 1,
+      },
+      {
+        position: "RB",
+        demandedPlayers: 48,
+        replacementPpg: 8,
+        starterPpg: 12,
+        elitePpg: 18,
+        scarcityDropoff: 10,
+        demandPerTeam: 4,
+      },
+      17,
+    );
+    expect(result.fundamentalValue).toBe(result.value);
+    expect(result.productionValue).toBeLessThan(result.fundamentalValue);
+    expect(result.futureAssetAdjustment).toBeCloseTo(
+      result.fundamentalValue - result.productionValue,
+      1,
+    );
+    expect(result.marketValue).toBeNull();
+    expect(result.jimmyEdge).toBeNull();
+  });
+
   it("preserves a small positive value near replacement and approaches zero only far below it", () => {
     expect(normalizePlayerValue(0)).toBeGreaterThan(0);
     expect(normalizePlayerValue(-50)).toBeGreaterThan(0);

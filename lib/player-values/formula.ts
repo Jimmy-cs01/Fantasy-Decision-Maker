@@ -361,6 +361,16 @@ export function calculatePlayerValue(
     contextualPpg,
     productionConfidence: opportunity,
   });
+  const productionRaw = calculateRawPlayerValue({
+    medianPpg: player.projectedPpg,
+    floorPpg: player.floorPpg,
+    ceilingPpg: player.ceilingPpg,
+    expectedGames,
+    profile,
+    confidence: player.confidence,
+    productionConfidence: opportunity,
+  });
+  const productionValue = normalizePlayerValue(productionRaw.rawValue);
   const value = normalizePlayerValue(raw.rawValue);
   const floorValue = scenarioValue(
     player.floorPpg,
@@ -383,6 +393,11 @@ export function calculatePlayerValue(
     fullName: player.fullName,
     position: player.position,
     value,
+    productionValue,
+    fundamentalValue: value,
+    futureAssetAdjustment: round(value - productionValue),
+    marketValue: null,
+    jimmyEdge: null,
     tier: playerValueTier(value),
     projectedPpg: round(player.projectedPpg),
     replacementPpg: round(profile.replacementPpg),

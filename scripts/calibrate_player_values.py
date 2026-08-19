@@ -210,7 +210,15 @@ def current_report(calibration: dict, identities: pd.DataFrame, projections_path
     frame["floor"] = (frame["floor"] + shift).clip(lower=0)
     frame["ceiling"] = (frame["ceiling"] + shift).clip(lower=0)
     frame["confidence"] = frame.confidence.str.lower()
-    frame = frame.merge(identities[["player_id", "player_name"]], on="player_id", how="left")
+    if "player_name" in frame:
+        frame = frame.merge(
+            identities[["player_id", "player_name"]].rename(columns={"player_name": "identity_player_name"}),
+            on="player_id", how="left",
+        )
+        frame["player_name"] = frame["player_name"].fillna(frame["identity_player_name"])
+        frame = frame.drop(columns="identity_player_name")
+    else:
+        frame = frame.merge(identities[["player_id", "player_name"]], on="player_id", how="left")
     if DRAFT_PATH.exists():
         draft = pd.read_csv(DRAFT_PATH, usecols=["gsis_id", "draft_round", "draft_pick", "draft_status"], dtype={"gsis_id": "string"})
         frame = frame.merge(draft, left_on="player_id", right_on="gsis_id", how="left")

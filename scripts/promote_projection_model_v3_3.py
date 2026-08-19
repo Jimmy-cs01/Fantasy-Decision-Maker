@@ -17,6 +17,11 @@ from projection_pipeline.v3_3_config import (
     V3_3_FEATURE_VERSION,
     V3_3_PROJECTION_OUTPUT_PATH,
 )
+from projection_pipeline.v3_3_2_config import (
+    V3_3_2_ARTIFACT_DIR,
+    V3_3_2_FEATURE_VERSION,
+    V3_3_2_PROJECTION_OUTPUT_PATH,
+)
 
 VERSION = "v3.3"
 EXPECTED_SEASON = 2026
@@ -45,32 +50,33 @@ def projection_count(client: SupabaseRest, model_id: str, final_only: bool = Fal
     ))
 
 
-def metadata_payload(v33: dict, v32: dict) -> dict:
+def metadata_payload(v33: dict, v32: dict, version: str) -> dict:
+    is_v332 = version == "v3.3.2"
     return {
-        "version": VERSION,
-        "algorithm": "regularized position-specific XGBoost components with v3.3 correction layer",
+        "version": version,
+        "algorithm": "regularized position-specific XGBoost components with v3.3.2 passing hierarchy" if is_v332 else "regularized position-specific XGBoost components with v3.3 correction layer",
         "training_start_season": 2018,
         "training_end_season": 2025,
         "features": {
-            "feature_version": V3_3_FEATURE_VERSION,
+            "feature_version": V3_3_2_FEATURE_VERSION if is_v332 else V3_3_FEATURE_VERSION,
             "selected_snap_features": v32["selected_snap_features"],
-            "architecture": v33["architecture"],
-            "ensemble": v32["selected_candidate"],
+            "architecture": v33.get("architecture", "team pass attempts -> empirical target budget -> player target allocation -> exact scoring"),
+            "ensemble": v33.get("selected_candidate", v32["selected_candidate"]),
             "hyperparameters": v32["hyperparameters"],
             "random_seed": v32["random_seed"],
         },
         "metrics": {
-            "rolling_validation": v33["overall"]["v3_3"],
-            "v3_2_baseline": v33["overall"]["v3_2"],
+            "rolling_validation": v33["overall"].get("v3_3", v33["overall"].get("e6_tail_safety_rising_role")),
+            "v3_2_baseline": v33["overall"].get("v3_2", v33["overall"].get("e1_v3_3_1")),
             "folds": v33["folds"],
             "positions": v33["positions"],
-            "mandatory_gates": v33["mandatory_gates"],
+            "mandatory_gates": v33.get("mandatory_gates", {}),
             "current_sanity": v33.get("current_sanity"),
         },
     }
 
 
-def validate_local(frame: pd.DataFrame, player_ids: dict[str, str], model_version_id: str) -> tuple[list[dict], dict]:
+def validate_local(frame: pd.DataFrame, player_ids: dict[str, str], model_version_id: str, expected_version: str = VERSION) -> tuple[list[dict], dict]:
     required = {
         "gsis_id", "season", "week", "season_type", "projected_stats",
         "model_projection_ppr", "projected_points_standard",
@@ -85,7 +91,7 @@ def validate_local(frame: pd.DataFrame, player_ids: dict[str, str], model_versio
         frame.season.ne(EXPECTED_SEASON)
         | frame.week.ne(EXPECTED_WEEK)
         | frame.season_type.ne("REG")
-        | frame.model_version.ne(VERSION)
+        | frame.model_version.ne(expected_version)
     ]
     component_failures: list[str] = []
     invalid_json: list[str] = []
@@ -128,30 +134,33 @@ def validate_local(frame: pd.DataFrame, player_ids: dict[str, str], model_versio
 def main() -> None:
     parser = argparse.ArgumentParser(description="Preflight and atomically import frozen v3.3 projections.")
     parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--input", type=Path, default=V3_3_PROJECTION_OUTPUT_PATH)
+    parser.add_argument("--version", choices=(VERSION, "v3.3.2"), default=VERSION)
+    parser.add_argument("--input", type=Path)
     args = parser.parse_args()
     load_local_environment()
     client = SupabaseRest()
-    frame = pd.read_csv(args.input, dtype={"gsis_id": "string"})
-    v33 = json.loads((V3_3_ARTIFACT_DIR / "manifest.json").read_text())
+    input_path = args.input or (V3_3_2_PROJECTION_OUTPUT_PATH if args.version == "v3.3.2" else V3_3_PROJECTION_OUTPUT_PATH)
+    artifact_dir = V3_3_2_ARTIFACT_DIR if args.version == "v3.3.2" else V3_3_ARTIFACT_DIR
+    frame = pd.read_csv(input_path, dtype={"gsis_id": "string"})
+    v33 = json.loads((artifact_dir / "manifest.json").read_text())
     v32 = json.loads((V3_2_ARTIFACT_DIR / "manifest.json").read_text())
 
     versions = paged(client, "model_versions?select=id,version,algorithm,training_start_season,training_end_season,features,metrics,created_at&order=created_at.asc")
     version_by_name = {row["version"]: row for row in versions}
-    remote_v33 = version_by_name.get(VERSION)
+    remote_v33 = version_by_name.get(args.version)
     remote_v2 = version_by_name.get("v2")
     print("Remote model versions:")
     for row in versions:
         print(f"  {row['version']}: {row['id']} ({row['training_start_season']}-{row['training_end_season']})")
-    print(f"v3.3 metadata exists: {'YES' if remote_v33 else 'NO'}")
+    print(f"{args.version} metadata exists: {'YES' if remote_v33 else 'NO'}")
     print(f"v2 2026 Week 1 rows: {projection_count(client, remote_v2['id']) if remote_v2 else 0}")
     print(f"v2 reconciled rows: {projection_count(client, remote_v2['id'], True) if remote_v2 else 0}")
-    print(f"existing v3.3 rows: {projection_count(client, remote_v33['id']) if remote_v33 else 0}")
+    print(f"existing {args.version} rows: {projection_count(client, remote_v33['id']) if remote_v33 else 0}")
 
     players = paged(client, "players?select=id,gsis_id&gsis_id=not.is.null")
     player_ids = {str(row["gsis_id"]): str(row["id"]) for row in players}
     planned_model_id = str(remote_v33["id"]) if remote_v33 else "00000000-0000-0000-0000-000000000000"
-    rows, preflight = validate_local(frame, player_ids, planned_model_id)
+    rows, preflight = validate_local(frame, player_ids, planned_model_id, args.version)
     print("Projection import preflight")
     print(f"Reconciled/generated rows: {preflight['generated_rows']}")
     print(f"Valid rows: {preflight['valid_rows']}")
@@ -169,10 +178,10 @@ def main() -> None:
         raise RuntimeError("Refusing v3.3 import because production preflight failed.")
 
     if remote_v33 is None:
-        created = client.request("POST", "model_versions", [metadata_payload(v33, v32)], "return=representation")
+        created = client.request("POST", "model_versions", [metadata_payload(v33, v32, args.version)], "return=representation")
         remote_v33 = created[0]
-        print(f"Created v3.3 model metadata: {remote_v33['id']}")
-    rows, preflight = validate_local(frame, player_ids, str(remote_v33["id"]))
+        print(f"Created {args.version} model metadata: {remote_v33['id']}")
+    rows, preflight = validate_local(frame, player_ids, str(remote_v33["id"]), args.version)
     # One PostgREST upsert is one database statement: either all 613 projection
     # rows succeed or none are committed.
     client.request(
@@ -184,7 +193,7 @@ def main() -> None:
     remote_count = projection_count(client, str(remote_v33["id"]))
     if remote_count != len(rows):
         raise RuntimeError(f"Post-import count mismatch: expected {len(rows)}, found {remote_count}")
-    print(f"Atomically imported {remote_count} v3.3 projections; v2 remained untouched.")
+    print(f"Atomically imported {remote_count} {args.version} projections; v2 remained untouched.")
 
 
 if __name__ == "__main__":

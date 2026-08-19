@@ -305,6 +305,19 @@ The training command evaluates 2022–2025 as four rolling chronological folds.
 The comparison is a local 2026 Week 1 dry run. Neither command imports rows or
 activates a production model.
 
+The permanent cross-version evaluation and football-sanity reports are:
+
+```bash
+npm run model:scoreboard
+npm run model:sanity-scoreboard
+npm run model:v3.3.1:compare
+```
+
+The scoreboard adds catastrophic misses, rank/start-sit metrics, role-change
+slices, expanding-window quantile calibration, and empirical confidence audits.
+The v3.3.1 comparison exercises the current-team/Week 1 allocation repair
+locally only. See [the analytics foundation audit](docs/analytics-foundation.md).
+
 Production-facing queries use the server-only
 `ACTIVE_PROJECTION_MODEL_VERSION` setting (currently `v2`) rather than selecting
 whichever experiment has the newest `generated_at`. A future rollback is one
@@ -375,6 +388,12 @@ Supported opt-in prop markets are passing/rushing/receiving yards, passing touch
 ## Player Value and team strength
 
 Player Value is a deterministic, interpretable near-0-to-50 layer over the existing football-stat projections. Fifty is a soft historical-level reference, not a cap; the transform permits a rare, controlled tail toward 55. It never trains or stores a second projection. The general value uses a documented 10-team, 1QB/2RB/2WR/1TE/2FLEX/6-bench Half-PPR league; a synced league is rescored from the same projected stat line using its supported Sleeper rules and actual roster positions.
+
+The result also keeps the concepts separate: `productionValue` contains current
+projection/replacement/scarcity, `fundamentalValue` adds bounded future and role
+context, and `futureAssetAdjustment` is their difference. `marketValue` and
+`jimmyEdge` remain null until an independent market source is configured; missing
+market data is never treated as zero.
 
 Replacement demand is calculated from the projected pool. Every league-wide fixed starter slot is filled first. Constrained FLEX slots and then broader FLEX/SUPER_FLEX slots are assigned to the highest projected remaining eligible player. Bench slots extend the roster boundary proportionally to each position's starter demand, so 1QB benches do not fill with quarterbacks merely because QB raw scoring is higher. Replacement PPG is the first player outside that position's complete roster boundary. This makes team count, bench depth, multiple FLEX slots, and Superflex change replacement levels without static position multipliers.
 
