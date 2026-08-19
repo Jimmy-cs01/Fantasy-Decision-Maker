@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Sidebar } from "@/components/dashboard/sidebar";
+import { AppShell } from "@/components/dashboard/app-shell";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -9,5 +9,5 @@ export default async function SeasonLayout({ children }: { children: React.React
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
   if (!user) redirect("/login?next=/season");
-  return <div className="min-h-screen md:flex"><Sidebar /><main className="min-w-0 flex-1 p-4 sm:p-5 md:p-8">{children}</main></div>;
+  return <AppShell>{children}</AppShell>;
 }

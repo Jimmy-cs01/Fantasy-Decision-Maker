@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+const overview = readFileSync(
+  new URL("../../../../components/dashboard/league-overview.tsx", import.meta.url),
+  "utf8",
+);
 const service = readFileSync(
   new URL("../../../../lib/player-values/league-service.ts", import.meta.url),
   "utf8",
@@ -23,16 +27,17 @@ describe("league roster query contract", () => {
 
   it("renders league-scored values, optimal lineup PPG, and the shared player route", () => {
     expect(source).toContain("getLeagueRosterAnalytics");
-    expect(source).toContain("<TeamSelector");
-    expect(source).toContain("teamId=${team.id}");
-    expect(source).toContain("selectedTeamProjection.projectedPpg.toFixed(1)");
+    expect(source).toContain("<LeagueOverview");
+    expect(overview).toContain("<TeamSelector");
+    expect(source).toContain("teamHref={(teamId)");
+    expect(overview).toContain("selectedTeamProjection.projectedPpg.toFixed(1)");
     expect(service).toContain("optimizeProjectedLineup");
     expect(service).toContain("player_value");
   });
 
   it("distinguishes a required roster failure from a genuinely empty synchronized roster", () => {
     expect(source).toContain("rosterLoadFailed");
-    expect(source).toContain("Roster data is temporarily unavailable");
-    expect(source).toContain("No player data was returned for this roster");
+    expect(overview).toContain("Roster data is temporarily unavailable");
+    expect(overview).toContain("No player data was returned for this roster");
   });
 });

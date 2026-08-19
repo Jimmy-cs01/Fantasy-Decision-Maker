@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { isNavigationActive, NAVIGATION_ITEMS } from "./navigation-items";
 
 const sidebarSource = readFileSync(new URL("./sidebar.tsx", import.meta.url), "utf8");
+const appShellSource = readFileSync(new URL("./app-shell.tsx", import.meta.url), "utf8");
 
 describe("application navigation", () => {
   it("uses one shared, complete link configuration", () => {
@@ -38,5 +39,14 @@ describe("application navigation", () => {
     expect(sidebarSource).toContain("md:hidden");
     expect(sidebarSource).toContain("hidden min-h-screen");
     expect(sidebarSource).not.toContain("overflow-x-auto");
+  });
+
+  it("uses the same responsive shell and navigation for guest sessions", () => {
+    expect(appShellSource).toContain("<Sidebar guest={guest} guestView={guestView}");
+    expect(sidebarSource).toContain("guest ? NAVIGATION_ITEMS.filter");
+    expect(sidebarSource).toContain('item.href !== "/dashboard/connect"');
+    expect(sidebarSource).toContain("guestHref(item.href, guestLeagueId)");
+    expect(sidebarSource).toContain('["/players", "/matchups", "/depth-charts"].includes(href)');
+    expect(sidebarSource).toContain("<GuestAccountPanel");
   });
 });

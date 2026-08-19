@@ -1,9 +1,6 @@
 import { notFound } from "next/navigation";
-import { LeagueRoster } from "@/components/dashboard/league-roster";
-import { TeamSelector } from "@/components/dashboard/team-selector";
+import { LeagueOverview } from "@/components/dashboard/league-overview";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { selectLeagueTeam } from "@/lib/fantasy/roster-order";
 import { getLeagueRosterAnalytics } from "@/lib/player-values/league-service";
 import { createClient } from "@/lib/supabase/server";
 import { syncLeague } from "../../actions";
@@ -66,11 +63,6 @@ export default async function LeaguePage({
       isMyTeam: team.league_member_id === personalMemberId || team.provider_metadata?.is_user_team === true,
     };
   });
-  const selectedTeam = selectLeagueTeam(
-    teams,
-    first(query.teamId) ?? teams.find((team) => team.isMyTeam)?.id ?? null,
-    personalMemberId,
-  );
   let analytics: Awaited<ReturnType<typeof getLeagueRosterAnalytics>> | null =
     null;
   let rosterLoadFailed = false;
@@ -80,168 +72,35 @@ export default async function LeaguePage({
     rosterLoadFailed = true;
     console.error("Unable to load league projection analytics", error);
   }
-  const players = selectedTeam
-    ? (analytics?.rostersByTeam.get(selectedTeam.id) ?? [])
-    : [];
-  const selectedTeamProjection = selectedTeam
-    ? (analytics?.teamSummaries.get(selectedTeam.id) ?? null)
-    : null;
   const projectionLabel =
     analytics?.projectionSeason && analytics.projectionWeek
       ? `${analytics.projectionSeason} W${analytics.projectionWeek}`
       : null;
 
-  const positionCounts = players.reduce<Record<string, number>>(
-    (counts, player) => {
-      const key = player.position || "Other";
-      counts[key] = (counts[key] ?? 0) + 1;
-      return counts;
-    },
-    {},
-  );
   const teamName = (team: (typeof teams)[number]) =>
     team.name || team.ownerName || `Team ${team.provider_team_id ?? team.sleeper_roster_id ?? "—"}`;
 
-  return (
-    <div className="mx-auto max-w-6xl">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black tracking-[0.2em] text-cyan-300">
-            LEAGUE OVERVIEW
-          </p>
-          <h1 className="mt-1 text-2xl font-black sm:text-3xl">
-            {league.name}
-          </h1>
-          <p className="mt-1.5 text-sm text-slate-400">
-            {league.season} · {league.season_type ?? "regular"} ·{" "}
-            {league.total_rosters ?? teams.length} teams
-            {league.provider ? ` · ${league.provider === "yahoo" ? "Yahoo" : "Sleeper"}` : ""}
-          </p>
-        </div>
-        <form action={syncLeague}>
+  return <LeagueOverview
+    league={{
+      id: league.id, name: league.name, season: league.season,
+      seasonType: league.season_type, totalRosters: league.total_rosters ?? teams.length,
+      provider: league.provider, rosterPositions: league.roster_positions ?? [],
+      scoringAvailable: Object.keys(league.scoring_settings ?? {}).length > 0,
+      lastSyncedAt: league.last_synced_at,
+    }}
+    teams={teams.map((team) => ({
+      id: team.id, displayName: teamName(team), ownerName: team.ownerName,
+      wins: Number(team.wins ?? 0), losses: Number(team.losses ?? 0), ties: Number(team.ties ?? 0),
+      isMyTeam: team.isMyTeam, players: analytics?.rostersByTeam.get(team.id) ?? [],
+      summary: analytics?.teamSummaries.get(team.id) ?? null,
+    }))}
+    selectedTeamId={first(query.teamId)}
+    teamHref={(teamId) => `/dashboard/league/${league.id}?teamId=${teamId}`}
+    projectionLabel={projectionLabel}
+    rosterLoadFailed={rosterLoadFailed}
+    headerAction={<form action={syncLeague}>
           <input type="hidden" name="leagueId" value={league.id} />
           <Button>Sync League</Button>
-        </form>
-      </div>
-      <p className="mt-3 text-xs text-slate-500">
-        Last synchronization:{" "}
-        {league.last_synced_at
-          ? new Date(league.last_synced_at).toLocaleString()
-          : "Not yet synced"}
-      </p>
-
-      <TeamSelector
-        items={teams.map((team) => ({
-          id: team.id,
-          href: `/dashboard/league/${league.id}?teamId=${team.id}`,
-          label: team.isMyTeam ? "My Team" : teamName(team),
-          detail:
-            team.isMyTeam && teamName(team) !== "My Team"
-              ? teamName(team)
-              : null,
-          projectedPpg:
-            analytics?.teamSummaries.get(team.id)?.projectedPpg ?? null,
-          selected: selectedTeam?.id === team.id,
-        }))}
-      />
-
-      <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(17rem,1fr)]">
-        <Card className="p-3 sm:p-4">
-          <div className="flex items-end justify-between gap-3 px-1">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black tracking-[0.2em] text-cyan-300 uppercase">
-                {selectedTeam?.isMyTeam
-                  ? "My roster"
-                  : selectedTeam?.ownerName || "League roster"}
-              </p>
-              <h2 className="mt-1 truncate text-lg font-bold sm:text-xl">
-                {selectedTeam ? teamName(selectedTeam) : "Roster unavailable"}
-              </h2>
-            </div>
-            {selectedTeam && (
-              <div className="shrink-0 text-right">
-                <p className="text-sm font-black text-slate-300">
-                  {selectedTeam.wins ?? 0}-{selectedTeam.losses ?? 0}
-                  {selectedTeam.ties ? `-${selectedTeam.ties}` : ""}
-                </p>
-                {selectedTeamProjection?.projectedPpg != null && (
-                  <p className="mt-1 text-xs font-bold text-cyan-300">
-                    {selectedTeamProjection.projectedPpg.toFixed(1)} projected
-                    PPG{selectedTeamProjection.complete ? "" : " · partial"}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-          {players.length ? (
-            <LeagueRoster
-              players={players}
-              projectionLabel={projectionLabel}
-              leagueId={league.id}
-            />
-          ) : (
-            <p className="mt-4 rounded-lg border border-dashed border-slate-700 p-5 text-sm text-slate-400">
-              {rosterLoadFailed
-                ? "Roster data is temporarily unavailable. Your synchronized league is still connected; please retry this page."
-                : `No player data was returned for this roster. Some ${league.provider === "yahoo" ? "Yahoo" : "Sleeper"} identities may still need canonical mapping.`}
-            </p>
-          )}
-        </Card>
-        <div className="space-y-5">
-          <Card>
-            <h2 className="font-bold">League format</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Scoring</dt>
-                <dd>
-                  {Object.keys(league.scoring_settings ?? {}).length
-                    ? `${league.provider === "yahoo" ? "Yahoo" : "Sleeper"} league scoring`
-                    : "PPR fallback"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Projection</dt>
-                <dd>{projectionLabel ?? "Unavailable"}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Optimal lineup</dt>
-                <dd>
-                  {selectedTeamProjection
-                    ? `${selectedTeamProjection.filledSlots}/${selectedTeamProjection.requiredSlots} slots`
-                    : "Unavailable"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Starter slots</dt>
-                <dd className="text-right">
-                  {(league.roster_positions ?? [])
-                    .filter(
-                      (slot: string) => !["BN", "IR", "TAXI"].includes(slot),
-                    )
-                    .join(" · ") || "—"}
-                </dd>
-              </div>
-            </dl>
-          </Card>
-          <Card>
-            <h2 className="font-bold">Positional breakdown</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {Object.entries(positionCounts).length ? (
-                Object.entries(positionCounts).map(([position, count]) => (
-                  <span
-                    key={position}
-                    className="rounded bg-slate-800 px-3 py-1 text-sm"
-                  >
-                    {position} <b className="text-cyan-300">{count}</b>
-                  </span>
-                ))
-              ) : (
-                <p className="text-sm text-slate-400">Roster unavailable</p>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
-    </div>
-  );
+        </form>}
+  />;
 }
