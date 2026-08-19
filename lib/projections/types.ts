@@ -19,6 +19,17 @@ export interface ProjectedStatLine {
   receiving_yards?: number;
   receiving_touchdowns?: number;
   receiving_first_downs?: number;
+  receptions_20_29_yards?: number;
+  receptions_30_39_yards?: number;
+  receptions_40_plus_yards?: number;
+  receiving_touchdowns_40_plus_yards?: number;
+  receiving_touchdowns_50_plus_yards?: number;
+  rushes_40_plus_yards?: number;
+  rushing_touchdowns_40_plus_yards?: number;
+  rushing_touchdowns_50_plus_yards?: number;
+  completions_40_plus_yards?: number;
+  passing_touchdowns_40_plus_yards?: number;
+  passing_touchdowns_50_plus_yards?: number;
 }
 
 export interface ProjectionRecord {

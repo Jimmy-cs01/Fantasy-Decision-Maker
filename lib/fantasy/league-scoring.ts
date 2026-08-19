@@ -9,7 +9,13 @@ export interface LeagueScoringStatLine {
   receptions?: number | null; receiving_yards?: number | null; receiving_touchdowns?: number | null;
   completions?: number | null; pass_attempts?: number | null; passing_first_downs?: number | null; first_down_passes?: number | null;
   rush_attempts?: number | null; rushing_first_downs?: number | null; receiving_first_downs?: number | null;
+  receptions_20_29_yards?: number | null; receptions_30_39_yards?: number | null; receptions_40_plus_yards?: number | null;
+  receiving_touchdowns_40_plus_yards?: number | null; receiving_touchdowns_50_plus_yards?: number | null;
+  rushes_40_plus_yards?: number | null; rushing_touchdowns_40_plus_yards?: number | null; rushing_touchdowns_50_plus_yards?: number | null;
+  completions_40_plus_yards?: number | null; passing_touchdowns_40_plus_yards?: number | null; passing_touchdowns_50_plus_yards?: number | null;
 }
+
+export type ScoringSupport = "deterministic" | "expected" | "unsupported";
 
 const STANDARD_BASELINE = {
   pass_yd: 0.04,
@@ -21,6 +27,22 @@ const STANDARD_BASELINE = {
   rec_yd: 0.1,
   rec_td: 6,
 } as const;
+
+const LINEAR_SCORING_KEYS = new Set([
+  ...Object.keys(STANDARD_BASELINE),
+  "pass_cmp", "pass_att", "pass_inc", "pass_fd", "rush_att", "rush_fd", "rec_fd",
+  "bonus_rec_qb", "bonus_rec_rb", "bonus_rec_wr", "bonus_rec_te", "bonus_rec_k",
+]);
+
+const EXPECTED_EVENT_SCORING_KEYS = new Set([
+  "rec_20_29", "rec_30_39", "rec_40p", "rec_td_40p", "rec_td_50p",
+  "rush_40p", "rush_td_40p", "rush_td_50p",
+  "pass_cmp_40p", "pass_td_40p", "pass_td_50p",
+]);
+
+const NON_OFFENSIVE_PREFIXES = [
+  "bonus_k_", "def_", "fgm_", "fgmiss_", "idp_", "kick_", "kr_", "pr_", "pts_allow_", "st_", "xpm", "xpmiss",
+];
 
 const value = (input: unknown) => {
   const numeric = Number(input ?? 0);
@@ -59,7 +81,47 @@ export function calculateLeagueSeasonPoints(row: LeagueScoringStatLine, settings
   points += value(row.rush_attempts) * value(settings.rush_att);
   points += value(row.rushing_first_downs) * value(settings.rush_fd);
   points += value(row.receiving_first_downs) * value(settings.rec_fd);
+  points += value(row.receptions_20_29_yards) * value(settings.rec_20_29);
+  points += value(row.receptions_30_39_yards) * value(settings.rec_30_39);
+  points += value(row.receptions_40_plus_yards) * value(settings.rec_40p);
+  points += value(row.receiving_touchdowns_40_plus_yards) * value(settings.rec_td_40p);
+  points += value(row.receiving_touchdowns_50_plus_yards) * value(settings.rec_td_50p);
+  points += value(row.rushes_40_plus_yards) * value(settings.rush_40p);
+  points += value(row.rushing_touchdowns_40_plus_yards) * value(settings.rush_td_40p);
+  points += value(row.rushing_touchdowns_50_plus_yards) * value(settings.rush_td_50p);
+  points += value(row.completions_40_plus_yards) * value(settings.pass_cmp_40p);
+  points += value(row.passing_touchdowns_40_plus_yards) * value(settings.pass_td_40p);
+  points += value(row.passing_touchdowns_50_plus_yards) * value(settings.pass_td_50p);
   return Math.round(points * 100) / 100;
+}
+
+/**
+ * Describes which non-zero offensive Sleeper settings can be translated from
+ * Jimmy's component forecast. Expected-event settings require the separately
+ * estimated, heavily regressed long-play fields above. Defense and kicking
+ * settings are intentionally outside an offensive player projection audit.
+ */
+export function analyzeSleeperScoringCoverage(settings: SleeperScoringSettings) {
+  const rows = Object.entries(settings)
+    .filter(([, rate]) => value(rate) !== 0)
+    .filter(([key]) => !NON_OFFENSIVE_PREFIXES.some((prefix) => key.startsWith(prefix)))
+    .map(([key, rate]) => ({
+      key,
+      rate: value(rate),
+      support: (LINEAR_SCORING_KEYS.has(key)
+        ? "deterministic"
+        : EXPECTED_EVENT_SCORING_KEYS.has(key)
+          ? "expected"
+          : "unsupported") as ScoringSupport,
+    }));
+  const supported = rows.filter((row) => row.support !== "unsupported").length;
+  return {
+    settings: rows,
+    supported,
+    total: rows.length,
+    coverage: rows.length ? supported / rows.length : 1,
+    unsupported: rows.filter((row) => row.support === "unsupported").map((row) => row.key),
+  };
 }
 
 export function withLeagueScoring(row: PlayerSeasonRow, settings: SleeperScoringSettings): PlayerSeasonRow {

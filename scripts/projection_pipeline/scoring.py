@@ -17,6 +17,12 @@ STAT_KEYS = {
     "pass_cmp": "completions", "pass_att": "pass_attempts",
     "pass_fd": "passing_first_downs", "rush_att": "rush_attempts",
     "rush_fd": "rushing_first_downs", "rec_fd": "receiving_first_downs",
+    "rec_20_29": "receptions_20_29_yards", "rec_30_39": "receptions_30_39_yards",
+    "rec_40p": "receptions_40_plus_yards", "rec_td_40p": "receiving_touchdowns_40_plus_yards",
+    "rec_td_50p": "receiving_touchdowns_50_plus_yards", "rush_40p": "rushes_40_plus_yards",
+    "rush_td_40p": "rushing_touchdowns_40_plus_yards", "rush_td_50p": "rushing_touchdowns_50_plus_yards",
+    "pass_cmp_40p": "completions_40_plus_yards", "pass_td_40p": "passing_touchdowns_40_plus_yards",
+    "pass_td_50p": "passing_touchdowns_50_plus_yards",
 }
 
 

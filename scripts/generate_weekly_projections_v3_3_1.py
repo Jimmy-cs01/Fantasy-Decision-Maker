@@ -14,6 +14,7 @@ from projection_pipeline.evaluation_scoreboard import assign_empirical_confidenc
 from projection_pipeline.features import read_historical_stats
 from projection_pipeline.sanity_scoreboard import current_projection_sanity
 from projection_pipeline.scoring import default_scores
+from projection_pipeline.long_play_features import LongPlayRateLookup
 from projection_pipeline.v3_1_config import V3_1_PROJECTION_OUTPUT_PATH
 from projection_pipeline.v3_1_model import load_position_models, predict_coherent_candidate
 from projection_pipeline.v3_2_config import SNAP_WEEKLY_PATH, V3_2_ARTIFACT_DIR
@@ -52,18 +53,39 @@ from train_projection_model_v3_2 import coherence_violations
 
 
 DEPTH_PATH = Path("data/processed/depth_chart_roles.csv")
+IDENTITY_PATH = Path("data/processed/player_identity.csv")
+TEAM_ALIASES = {"LAR": "LA", "JAC": "JAX"}
+
+
+def normalize_team(value: object) -> str | None:
+    if pd.isna(value) or not str(value).strip():
+        return None
+    team = str(value).strip().upper()
+    return TEAM_ALIASES.get(team, team)
 
 
 def current_roles() -> pd.DataFrame:
     if not DEPTH_PATH.exists():
         return pd.DataFrame(columns=["player_id", "team"])
     depth = pd.read_csv(DEPTH_PATH, dtype={"gsis_id": "string"})
-    return (
+    roles = (
         depth.sort_values(["season", "source_updated_at", "fetched_at"])
         .groupby("gsis_id", as_index=False)
         .tail(1)
         .rename(columns={"gsis_id": "player_id"})
     )
+    roles["team"] = roles.team.map(normalize_team)
+    if not IDENTITY_PATH.exists():
+        return roles
+    identities = pd.read_csv(
+        IDENTITY_PATH, dtype="string", usecols=["player_id", "sleeper_current_team"],
+    ).drop_duplicates("player_id")
+    identities["team"] = identities.sleeper_current_team.map(normalize_team)
+    fallback = identities.loc[
+        identities.team.notna() & ~identities.player_id.isin(set(roles.player_id)),
+        ["player_id", "team"],
+    ]
+    return pd.concat([roles, fallback], ignore_index=True, sort=False)
 
 
 def main() -> None:
@@ -138,11 +160,15 @@ def main() -> None:
         )[0][ineligible]
 
     rows: list[dict[str, object]] = []
+    long_play_rates = LongPlayRateLookup.load()
     for index, source in inference.iterrows():
         position = str(source.historical_position)
         stats, final_ppr, reconciliation = reconcile_components_exact(
             component_rows[index], corrected[index], position,
         )
+        # Rare-play fields are expected event counts used only by league scoring.
+        # They do not change the neutral football projection or base PPR model.
+        stats.update(long_play_rates.expected(stats, str(source.player_id), position))
         scores = default_scores(stats, position)
         prior = v31_by_player.loc[source.player_id] if source.player_id in v31_by_player.index else None
         residual_low = float(prior.floor_ppr - prior.model_projection_ppr) if prior is not None else -4.0
