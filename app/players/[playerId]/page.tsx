@@ -19,6 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWeeklyMatchups, matchupContextByTeam } from "@/lib/nfl/schedule-service";
 import type { MatchupContext } from "@/lib/nfl/types";
 import { getOffensiveDepthChartForTeam } from "@/lib/nfl/depth-chart-service";
+import { publicPlayerDataMessage } from "@/lib/players/data-errors";
 
 const number = (value: unknown) => Number(value ?? 0);
 const display = (value: unknown, digits = 0) => value === null || value === undefined || value === "" ? "—" : number(value).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -34,17 +35,18 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
   const seasonType = ((first(query.seasonType) ?? first(query.type)) === "POST" ? "POST" : "REG") as SeasonType;
   const requestedSeason = Number.parseInt(first(query.season) ?? "", 10);
   let detail: Awaited<ReturnType<typeof getPlayerDetail>>;
-  try { detail = await getPlayerDetail(playerId, requestedSeason, seasonType); } catch (error) { console.error(error); return <Card className="mx-auto max-w-3xl text-center"><h1 className="text-xl font-bold">Player statistics unavailable</h1><p className="mt-2 text-slate-400">Apply the latest player-stat migration before loading expanded statistics.</p><Link className="mt-5 inline-block text-cyan-300" href="/players">Return to players</Link></Card>; }
+  try { detail = await getPlayerDetail(playerId, requestedSeason, seasonType); } catch (error) { console.error(error); return <Card className="mx-auto max-w-3xl text-center"><h1 className="text-xl font-bold">Player statistics unavailable</h1><p className="mt-2 text-slate-400">{publicPlayerDataMessage(error)}</p><Link className="mt-5 inline-block text-cyan-300" href="/players">Return to players</Link></Card>; }
   if (!detail) notFound();
   const { player, seasons, season } = detail;
+  const canonicalPlayerId = player.id;
   const summary = detail.summary && scoring === "league" && selectedLeague ? withLeagueScoring(detail.summary, selectedLeague.scoring_settings) : detail.summary;
   const weeks = scoring === "league" && selectedLeague ? detail.weeks.map((week) => withLeagueWeeklyScoring(week, selectedLeague.scoring_settings)) : detail.weeks;
   const position = player.historical_position || player.sleeper_position || "—"; const scoringConfig = SCORING_COLUMNS[scoring];
   let projectionSeries: Awaited<ReturnType<typeof getPlayerProjectionSeries>> = [];
   let playerValue: Awaited<ReturnType<typeof getPlayerValue>> = null;
   const [projectionResult, valueResult] = await Promise.allSettled([
-    getPlayerProjectionSeries(playerId, { season: 2026, leagueId: scoring === "league" ? selectedLeague?.id : undefined, scoring }),
-    getPlayerValue(playerId, selectedLeague?.id),
+    getPlayerProjectionSeries(canonicalPlayerId, { season: 2026, leagueId: scoring === "league" ? selectedLeague?.id : undefined, scoring }),
+    getPlayerValue(canonicalPlayerId, selectedLeague?.id),
   ]);
   if (projectionResult.status === "fulfilled") projectionSeries = projectionResult.value;
   else console.error("Unable to load player projection", projectionResult.reason);
@@ -65,7 +67,7 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
     ? detail.history.map((row) => withLeagueScoring(row, selectedLeague.scoring_settings))
     : detail.history;
   const [positionFinishes, offensiveDepth] = await Promise.all([
-    getHistoricalPositionFinishes(playerId, player.historical_position, historicalRows.map((row) => row.season), scoringSettings),
+    getHistoricalPositionFinishes(canonicalPlayerId, player.historical_position, historicalRows.map((row) => row.season), scoringSettings),
     getOffensiveDepthChartForTeam(await createClient(), player.team, 2026),
   ]);
   const height = player.height ? `${Math.floor(player.height / 12)}′${player.height % 12}″` : "—";
@@ -77,7 +79,7 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
     {playerValue && <PlayerValueCard value={playerValue} leagueName={selectedLeague?.name} />}
     <PlayerWeeklyProjections rows={projectionSeries} currentWeek={projection?.week} />
     <PlayerHistory rows={historicalRows} ppgKey={scoringConfig.ppg} positionFinishes={positionFinishes} />
-    <section className="mt-6"><DepthChart team={`${player.team ?? "NFL team"} offense`} players={offensiveDepth} highlightedPlayerId={playerId} compact /></section>
+    <section className="mt-6"><DepthChart team={`${player.team ?? "NFL team"} offense`} players={offensiveDepth} highlightedPlayerId={canonicalPlayerId} compact /></section>
     {summary ? <>
       <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric label={`${SCORING_COLUMNS[scoring].label} PPG`} value={display(summary[scoringConfig.ppg], 1)} accent /><Metric label="Games" value={display(summary.games_played)} /><Metric label="Total Yards" value={display(summary.total_yards)} /><Metric label="Total Touchdowns" value={display(summary.total_touchdowns)} /></section>
       <div className="mt-6 grid gap-5 lg:grid-cols-2"><StatSection title="Fantasy summary" stats={[["Standard", summary.fantasy_points_standard, "", 1], ["Half PPR", summary.fantasy_points_half_ppr, "", 1], ["PPR", summary.fantasy_points_ppr, "", 1], ...(scoring === "league" ? [["League", summary.fantasy_points_league, "", 1] as Stat] : []), ["True Touches", summary.true_touches], ["Snap Share", summary.snap_share, "%", 1, true], ["Games", summary.games_played]]} />

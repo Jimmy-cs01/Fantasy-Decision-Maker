@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import {
+  getEphemeralLeagueRosterAnalytics,
   getLeagueRosterAnalytics,
   type LeagueAnalyticsDependencies,
 } from "./league-service";
@@ -204,5 +205,36 @@ describe("league analytics partial failures", () => {
         dependencies(),
       ),
     ).rejects.toThrow("Unable to load league rosters");
+  });
+
+  it("hydrates an ephemeral guest roster without querying saved roster tables", async () => {
+    const db = database() as never;
+    const result = await getEphemeralLeagueRosterAnalytics(
+      db,
+      { ...league, id: "guest:league-1" },
+      teams,
+      [{ id: "guest-roster", fantasy_team_id: "team-1", starters: ["sleeper-1"] }],
+      [{
+        roster_id: "guest-roster",
+        is_starter: true,
+        roster_slot: "RB",
+        roster_slot_index: 0,
+        players: {
+          id: "player-1",
+          sleeper_player_id: "sleeper-1",
+          full_name: "Roster Player",
+          position: "RB",
+          team: "BAL",
+          headshot_url: null,
+        },
+      }],
+      dependencies(),
+    );
+    expect(result.rostersByTeam.get("team-1")?.[0]).toMatchObject({
+      full_name: "Roster Player",
+      projected_ppg: expect.any(Number),
+      player_value: expect.any(Number),
+    });
+    expect((db as { from: ReturnType<typeof vi.fn> }).from).not.toHaveBeenCalled();
   });
 });

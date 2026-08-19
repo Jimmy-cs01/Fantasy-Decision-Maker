@@ -18,20 +18,21 @@ export interface LeagueRosterPlayer {
   confidence: string | null;
 }
 
-export function LeagueRoster({ players, projectionLabel, leagueId }: { players: LeagueRosterPlayer[]; projectionLabel: string | null; leagueId: string }) {
+export function LeagueRoster({ players, projectionLabel, leagueId, playerQuery }: { players: LeagueRosterPlayer[]; projectionLabel: string | null; leagueId: string; playerQuery?: string }) {
   const starters = players.filter((player) => player.is_starter);
   const bench = players.filter((player) => !player.is_starter);
   return <div className="mt-4 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/45">
-    <RosterGroup title="STARTERS" players={starters} projectionLabel={projectionLabel} leagueId={leagueId} />
-    <RosterGroup title="BENCH" players={bench} projectionLabel={projectionLabel} leagueId={leagueId} bench />
+    <RosterGroup title="STARTERS" players={starters} projectionLabel={projectionLabel} leagueId={leagueId} playerQuery={playerQuery} />
+    <RosterGroup title="BENCH" players={bench} projectionLabel={projectionLabel} leagueId={leagueId} playerQuery={playerQuery} bench />
   </div>;
 }
 
-function RosterGroup({ title, players, projectionLabel, leagueId, bench = false }: {
+function RosterGroup({ title, players, projectionLabel, leagueId, playerQuery, bench = false }: {
   title: string;
   players: LeagueRosterPlayer[];
   projectionLabel: string | null;
   leagueId: string;
+  playerQuery?: string;
   bench?: boolean;
 }) {
   return <section aria-label={title === "STARTERS" ? "Starting lineup" : "Bench"}>
@@ -40,12 +41,12 @@ function RosterGroup({ title, players, projectionLabel, leagueId, bench = false 
       <span className="text-[10px] font-semibold text-slate-500">{projectionLabel ? `${projectionLabel} PROJ` : "PROJECTION"}</span>
     </div>
     {players.length ? <div className="divide-y divide-slate-800/80">
-      {players.map((player) => <RosterRow key={player.id} player={player} bench={bench} leagueId={leagueId} />)}
+      {players.map((player) => <RosterRow key={player.id} player={player} bench={bench} leagueId={leagueId} playerQuery={playerQuery} />)}
     </div> : <p className="px-3 py-4 text-sm text-slate-500">No {bench ? "bench players" : "starters"} available.</p>}
   </section>;
 }
 
-function RosterRow({ player, bench, leagueId }: { player: LeagueRosterPlayer; bench: boolean; leagueId: string }) {
+function RosterRow({ player, bench, leagueId, playerQuery }: { player: LeagueRosterPlayer; bench: boolean; leagueId: string; playerQuery?: string }) {
   const ppg = player.projected_ppg;
   const slot = player.roster_slot || "START";
   const compactSlot = slot === "SUPERFLEX" ? "SFLEX" : slot;
@@ -55,7 +56,7 @@ function RosterRow({ player, bench, leagueId }: { player: LeagueRosterPlayer; be
     </span>
     <PlayerAvatar name={player.full_name} headshotUrl={player.headshot_url} />
     <div className="min-w-0 leading-tight">
-      <PlayerLink playerId={player.id} query={`?scoring=league&leagueId=${leagueId}`} className="block truncate text-sm font-bold text-slate-50 sm:text-[15px]">{player.full_name}</PlayerLink>
+      <PlayerLink playerId={player.id} query={playerQuery ?? `?scoring=league&leagueId=${leagueId}`} className="block truncate text-sm font-bold text-slate-50 sm:text-[15px]">{player.full_name}</PlayerLink>
       <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 sm:text-xs">
         {player.team || "FA"} <span aria-hidden="true">•</span> {player.position || "—"}
       </p>

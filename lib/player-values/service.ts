@@ -226,9 +226,9 @@ export async function getPlayerValue(
   const {
     data: { user },
   } = await db.auth.getUser();
-  if (!user) return null;
   let leagueConfig: ValueLeagueConfig | undefined;
   if (leagueId) {
+    if (!user) throw new Error("Sign in to use a saved league context.");
     const { data: league, error } = await db
       .from("leagues")
       .select("total_rosters,roster_positions,scoring_settings")

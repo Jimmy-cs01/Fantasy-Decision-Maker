@@ -12,10 +12,10 @@ export async function getPlayerProjection(
 ) {
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
-  if (!user) return null;
 
   let settings: Record<string, number> | undefined;
   if (options.leagueId) {
+    if (!user) throw new Error("Sign in to use saved league scoring on player profiles.");
     const { data: league, error } = await db.from("leagues")
       .select("scoring_settings")
       .eq("id", options.leagueId)
@@ -67,9 +67,9 @@ export async function getPlayerProjectionSeries(
 ): Promise<WeeklyProjectionView[]> {
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
-  if (!user) return [];
   let settings: Record<string, number> | undefined;
   if (options.leagueId) {
+    if (!user) return [];
     const { data: league, error } = await db.from("leagues")
       .select("scoring_settings").eq("id", options.leagueId).eq("owner_id", user.id).maybeSingle();
     if (error) throw new Error(`Unable to load league scoring: ${error.message}`);

@@ -53,24 +53,24 @@ export interface TeamProjectionSummary {
   optimalStarterIds: string[];
 }
 
-interface LeagueInput {
+export interface LeagueInput {
   id: string;
   total_rosters: number | null;
   roster_positions: string[] | null;
   scoring_settings: Record<string, number> | null;
 }
 
-interface TeamInput {
+export interface TeamInput {
   id: string;
 }
 
-interface RosterRow {
+export interface RosterRow {
   id: string;
   fantasy_team_id: string;
   starters: Array<string | null> | null;
 }
 
-interface PlayerIdentity {
+export interface PlayerIdentity {
   id: string;
   sleeper_player_id: string | null;
   full_name: string;
@@ -79,7 +79,7 @@ interface PlayerIdentity {
   headshot_url: string | null;
 }
 
-interface RosterPlayerRow {
+export interface RosterPlayerRow {
   roster_id: string;
   is_starter: boolean;
   roster_slot: string | null;
@@ -138,6 +138,57 @@ export async function getLeagueRosterAnalytics(
       `Unable to load league roster players: ${rosterPlayersError.message}`,
     );
 
+  return hydrateLeagueRosterAnalytics(
+    db,
+    league,
+    teams,
+    rosters,
+    (rosterPlayersData ?? []) as RosterPlayerRow[],
+    dependencies,
+    latest,
+  );
+}
+
+/**
+ * Hydrates public Sleeper roster rows without persisting ownership or roster
+ * records. It deliberately shares the same projection/value/lineup pipeline as
+ * authenticated, database-backed leagues.
+ */
+export async function getEphemeralLeagueRosterAnalytics(
+  db: DatabaseClient,
+  league: LeagueInput,
+  teams: TeamInput[],
+  rosters: RosterRow[],
+  rosterPlayers: RosterPlayerRow[],
+  dependencies: LeagueAnalyticsDependencies = DEFAULT_DEPENDENCIES,
+) {
+  const latest = await optionalQuery({
+    label: "Guest projection pool lookup failed",
+    fallback: null,
+    metadata: { source: "Supabase/player_projections", leagueId: league.id },
+    query: (signal) => dependencies.getLatestProjectionPool(db, signal),
+  });
+  return hydrateLeagueRosterAnalytics(
+    db,
+    league,
+    teams,
+    rosters,
+    rosterPlayers,
+    dependencies,
+    latest,
+  );
+}
+
+async function hydrateLeagueRosterAnalytics(
+  db: DatabaseClient,
+  league: LeagueInput,
+  teams: TeamInput[],
+  rosters: RosterRow[],
+  rosterPlayersData: RosterPlayerRow[],
+  dependencies: LeagueAnalyticsDependencies,
+  latest: Awaited<ReturnType<typeof getLatestProjectionPool>>,
+) {
+
   const scoringSettings = Object.keys(league.scoring_settings ?? {}).length
     ? league.scoring_settings!
     : { rec: 1 };
@@ -148,7 +199,7 @@ export async function getLeagueRosterAnalytics(
   };
   const rosteredPlayerIds = [
     ...new Set(
-      ((rosterPlayersData ?? []) as RosterPlayerRow[]).flatMap((entry) => {
+      rosterPlayersData.flatMap((entry) => {
         const identity = Array.isArray(entry.players)
           ? entry.players[0]
           : entry.players;
@@ -227,7 +278,7 @@ export async function getLeagueRosterAnalytics(
       ]),
   );
   const entriesByRoster = new Map<string, RosterPlayerRow[]>();
-  for (const entry of (rosterPlayersData ?? []) as RosterPlayerRow[]) {
+  for (const entry of rosterPlayersData) {
     entriesByRoster.set(entry.roster_id, [
       ...(entriesByRoster.get(entry.roster_id) ?? []),
       entry,

@@ -38,4 +38,18 @@ describe("league roster presentation", () => {
     expect(slotBadgeClass("TE")).toContain("orange");
     expect(slotBadgeClass("FLEX")).toContain("gradient");
   });
+
+  it("keeps an unmapped guest Sleeper player link resolvable by the profile route", () => {
+    const player = {
+      ...base,
+      id: "sleeper:4046",
+      full_name: "Guest Player",
+      is_starter: true,
+      roster_slot: "RB",
+    } as LeagueRosterPlayer;
+    const html = renderToStaticMarkup(
+      <LeagueRoster players={[player]} projectionLabel="2026 W1" leagueId="guest-league" playerQuery="?scoring=ppr" />,
+    );
+    expect(html).toContain('href="/players/sleeper%3A4046?scoring=ppr"');
+  });
 });

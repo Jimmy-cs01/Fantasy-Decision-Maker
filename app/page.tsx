@@ -20,16 +20,18 @@ export default function Home() {
     <main className="relative min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,rgba(34,211,238,0.16),transparent_30%)]" />
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-xs font-black tracking-[0.18em] text-cyan-300 sm:text-sm">
             <ChartNoAxesCombined aria-hidden="true" size={20} /> JIMMY GM
           </div>
-          <Link
-            href="/login"
-            className="hidden text-sm font-bold text-slate-300 transition hover:text-white sm:block"
-          >
-            Log In
-          </Link>
+          <nav aria-label="Account options" className="flex items-center gap-3 text-sm font-bold">
+            <Link href="/guest" className="text-cyan-300 transition hover:text-cyan-200">
+              Continue as Guest
+            </Link>
+            <Link href="/login" className="hidden text-slate-300 transition hover:text-white sm:block">
+              Log In
+            </Link>
+          </nav>
         </header>
 
         <div className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.08fr_0.92fr] lg:py-16">
@@ -59,7 +61,16 @@ export default function Home() {
               >
                 Create Account
               </Link>
+              <Link
+                href="/guest"
+                className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-400/5 px-6 py-3 font-black text-cyan-200 transition hover:border-cyan-300 hover:bg-cyan-400/10"
+              >
+                Continue as Guest
+              </Link>
             </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Guest mode lets you try public Sleeper league tools without creating an account.
+            </p>
           </section>
 
           <section

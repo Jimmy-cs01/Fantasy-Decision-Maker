@@ -107,6 +107,18 @@ export default async function LoginPage({
           Log In
         </button>
       </form>
+      <div className="my-5 flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-slate-600">
+        <span className="h-px flex-1 bg-slate-800" /> or <span className="h-px flex-1 bg-slate-800" />
+      </div>
+      <Link
+        href="/guest"
+        className="flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/5 px-4 py-3 font-black text-cyan-200 transition hover:border-cyan-300 hover:bg-cyan-400/10"
+      >
+        Continue as Guest
+      </Link>
+      <p className="mt-2 text-center text-xs leading-5 text-slate-500">
+        Try public Sleeper league tools for this browser session. Nothing is saved to a Jimmy GM account.
+      </p>
     </AuthFrame>
   );
 }

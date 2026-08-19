@@ -10,6 +10,7 @@ import { parsePlayerFilters, positionColumns, POSITIONS, resolveScoringSelection
 import { getAvailableSeasons, getPlayerLeaders, getProjectedPlayerLeaders, getScoringLeagues } from "@/lib/players/queries";
 import { DEFAULT_VALUE_LEAGUE } from "@/lib/player-values/config";
 import type { ProjectionLeaderSort } from "@/lib/players/types";
+import { publicPlayerDataMessage } from "@/lib/players/data-errors";
 
 const first = (input: string | string[] | undefined) => Array.isArray(input) ? input[0] : input;
 
@@ -23,7 +24,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     seasons = [...new Set([2026, ...await getAvailableSeasons(filters.seasonType)])].sort((left, right) => right - left);
   } catch (cause) {
     console.error(cause);
-    error = "Historical statistics are unavailable. Apply the latest player-stat migration and verify the nflverse import.";
+    error = publicPlayerDataMessage(cause);
   }
   try {
     scoringLeagues = await getScoringLeagues();
@@ -44,17 +45,22 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       result = await getPlayerLeaders({ season, ...filters, scoring, scoringSettings: scoring === "league" ? selectedLeague?.scoring_settings : undefined });
     } catch (cause) {
       console.error(cause);
-      error = "The leaderboard query failed. Apply the latest nflverse migration before using the stat explorer.";
+      error = publicPlayerDataMessage(cause);
     }
   }
   if (season === 2026 && !error && mode === "projected") {
     const scoringSettings = scoring === "league" ? selectedLeague?.scoring_settings ?? { rec: 1 }
       : scoring === "ppr" ? { rec: 1 } : scoring === "half_ppr" ? { rec: 0.5 } : { rec: 0 };
     const rosterPositions = selectedLeague?.roster_positions ?? DEFAULT_VALUE_LEAGUE.rosterPositions;
-    projectionResult = await getProjectedPlayerLeaders({
-      position: filters.position, scoring, scoringSettings, sort: projectionSort, page: filters.page,
-      leagueConfig: { teams: Number(selectedLeague?.total_rosters ?? DEFAULT_VALUE_LEAGUE.teams), rosterPositions, scoringSettings },
-    });
+    try {
+      projectionResult = await getProjectedPlayerLeaders({
+        position: filters.position, scoring, scoringSettings, sort: projectionSort, page: filters.page,
+        leagueConfig: { teams: Number(selectedLeague?.total_rosters ?? DEFAULT_VALUE_LEAGUE.teams), rosterPositions, scoringSettings },
+      });
+    } catch (cause) {
+      console.error(cause);
+      error = publicPlayerDataMessage(cause);
+    }
   }
   const columns = positionColumns(filters.position, scoring);
   const activeResult = mode === "projected" ? projectionResult : result;

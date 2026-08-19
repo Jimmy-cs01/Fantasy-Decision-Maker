@@ -8,6 +8,8 @@ import { calculateValueContexts, getCurrentDepthRoles, getLatestProjectionPool, 
 import { projectionIdentity } from "@/lib/player-values/projections";
 import type { ValueLeagueConfig } from "@/lib/player-values/types";
 import { calculateHistoricalPositionFinishes } from "./position-finishes";
+import { resolveCanonicalPlayerId } from "./identifiers";
+import { publicDataError } from "./data-errors";
 
 async function attachHeadshots(db: Awaited<ReturnType<typeof createClient>>, rows: PlayerSeasonRow[]) {
   if (!rows.length) return rows;
@@ -123,21 +125,25 @@ export async function getPlayerLeaders(options: { season: number; seasonType: Se
 
 export async function getPlayerDetail(playerId: string, requestedSeason?: number, seasonType: SeasonType = "REG") {
   const db = await createClient();
-  const { data: player, error: playerError } = await db.from("players").select("id,full_name,gsis_id,pfr_player_id,sleeper_player_id,historical_position,sleeper_position,sleeper_fantasy_positions,team,birth_date,college,rookie_season,height,weight,headshot_url").eq("id", playerId).maybeSingle();
-  if (playerError) throw new Error(`Unable to load player: ${playerError.message}`);
+  let canonicalPlayerId: string | null;
+  try { canonicalPlayerId = await resolveCanonicalPlayerId(db, playerId); }
+  catch (error) { throw publicDataError("Unable to resolve player", error); }
+  if (!canonicalPlayerId) return null;
+  const { data: player, error: playerError } = await db.from("players").select("id,full_name,gsis_id,pfr_player_id,sleeper_player_id,historical_position,sleeper_position,sleeper_fantasy_positions,team,birth_date,college,rookie_season,height,weight,headshot_url").eq("id", canonicalPlayerId).maybeSingle();
+  if (playerError) throw publicDataError("Unable to load player", playerError);
   if (!player) return null;
-  const { data: seasonRows, error: seasonError } = await db.from("player_season_stats").select("*").eq("player_id", playerId).eq("season_type", seasonType).order("season", { ascending: false });
-  if (seasonError) throw new Error(`Unable to load player seasons: ${seasonError.message}`);
+  const { data: seasonRows, error: seasonError } = await db.from("player_season_stats").select("*").eq("player_id", canonicalPlayerId).eq("season_type", seasonType).order("season", { ascending: false });
+  if (seasonError) throw publicDataError("Unable to load player seasons", seasonError);
   const seasons = (seasonRows ?? []).map((row) => Number(row.season));
   const history = (seasonRows ?? []).slice(0, 4) as PlayerSeasonRow[];
   const season = requestedSeason && seasons.includes(requestedSeason) ? requestedSeason : seasons[0];
   if (!season) return { player, seasons, season: null, summary: null, weeks: [], history };
   const [{ data: summary, error: summaryError }, { data: weeks, error: weeksError }] = await Promise.all([
-    db.from("player_season_stats").select("*").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).maybeSingle(),
-    db.from("player_weekly_nfl_statistics").select("week,game_id,team,opponent_team,historical_position,pass_attempts,completions,completion_percentage,passing_yards,yards_per_attempt,passing_touchdowns,interceptions_thrown,first_down_passes,passing_epa,passing_cpoe,pacr,rush_attempts,rushing_yards,yards_per_carry,rushing_touchdowns,rushing_first_downs,rushing_epa,targets,receptions,receiving_yards,yards_per_target,yards_per_reception,receiving_touchdowns,receiving_first_downs,receiving_air_yards,yards_after_catch,receiving_adot,receiving_epa,racr,target_share,air_yards_share,wopr,true_touches,offense_snaps,team_offense_snaps,offense_snap_percentage,fantasy_points_standard,fantasy_points_half_ppr,fantasy_points_ppr").eq("player_id", playerId).eq("season", season).eq("season_type", seasonType).eq("provider", "nflverse").order("week", { ascending: true }),
+    db.from("player_season_stats").select("*").eq("player_id", canonicalPlayerId).eq("season", season).eq("season_type", seasonType).maybeSingle(),
+    db.from("player_weekly_nfl_statistics").select("week,game_id,team,opponent_team,historical_position,pass_attempts,completions,completion_percentage,passing_yards,yards_per_attempt,passing_touchdowns,interceptions_thrown,first_down_passes,passing_epa,passing_cpoe,pacr,rush_attempts,rushing_yards,yards_per_carry,rushing_touchdowns,rushing_first_downs,rushing_epa,targets,receptions,receiving_yards,yards_per_target,yards_per_reception,receiving_touchdowns,receiving_first_downs,receiving_air_yards,yards_after_catch,receiving_adot,receiving_epa,racr,target_share,air_yards_share,wopr,true_touches,offense_snaps,team_offense_snaps,offense_snap_percentage,fantasy_points_standard,fantasy_points_half_ppr,fantasy_points_ppr").eq("player_id", canonicalPlayerId).eq("season", season).eq("season_type", seasonType).eq("provider", "nflverse").order("week", { ascending: true }),
   ]);
-  if (summaryError) throw new Error(`Unable to load season summary: ${summaryError.message}`);
-  if (weeksError) throw new Error(`Unable to load weekly stats: ${weeksError.message}`);
+  if (summaryError) throw publicDataError("Unable to load season summary", summaryError);
+  if (weeksError) throw publicDataError("Unable to load weekly stats", weeksError);
   return { player, seasons, season, summary: summary as PlayerSeasonRow | null, weeks: weeks ?? [], history };
 }
 

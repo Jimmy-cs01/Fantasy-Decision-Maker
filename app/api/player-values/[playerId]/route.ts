@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPlayerValue } from "@/lib/player-values/service";
+import { createClient } from "@/lib/supabase/server";
+import { parsePlayerIdentifier, resolveCanonicalPlayerId } from "@/lib/players/identifiers";
 
 export async function GET(request: Request, context: { params: Promise<{ playerId: string }> }) {
   const { playerId } = await context.params;
   const leagueId = new URL(request.url).searchParams.get("leagueId") ?? undefined;
-  if (!z.string().uuid().safeParse(playerId).success || (leagueId && !z.string().uuid().safeParse(leagueId).success)) {
+  if (!parsePlayerIdentifier(playerId) || (leagueId && !z.string().uuid().safeParse(leagueId).success)) {
     return NextResponse.json({ error: "Invalid player value request." }, { status: 400 });
   }
   try {
-    const value = await getPlayerValue(playerId, leagueId);
+    const canonicalPlayerId = await resolveCanonicalPlayerId(await createClient(), playerId);
+    if (!canonicalPlayerId) return NextResponse.json({ error: "Player not found." }, { status: 404 });
+    const value = await getPlayerValue(canonicalPlayerId, leagueId);
     if (!value) return NextResponse.json({ error: "Player value unavailable." }, { status: 404 });
     return NextResponse.json({ value });
   } catch (error) {
