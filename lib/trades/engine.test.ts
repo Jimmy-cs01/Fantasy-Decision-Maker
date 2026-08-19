@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateMarginalDepthUtility,
+  classifyDepthImpact,
+  describeDepthImpact,
+  describeTradeImpact,
   diversifyTradeSuggestions,
   evaluateTrade,
   findTradeSuggestions,
@@ -165,8 +168,14 @@ describe("Trade Finder", () => {
       receive: [opponentRoster[1]],
       rosterPositions: ["RB", "WR"],
     });
-    expect(result.opponentImpact.promotedStarterIds.filter((id) => ["my-rb", "my-wr"].includes(id))).toHaveLength(1);
-    expect(result.reasons.some((reason) => reason.includes("Only 1 of 2"))).toBe(true);
+    expect(
+      result.opponentImpact.promotedStarterIds.filter((id) =>
+        ["my-rb", "my-wr"].includes(id),
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.reasons.some((reason) => reason.includes("Only 1 of 2")),
+    ).toBe(true);
   });
 
   it("recognizes when both incoming players improve legal starter slots", () => {
@@ -236,19 +245,37 @@ describe("Trade Finder", () => {
       rosterPositions: slots,
       valueWindow: 0.5,
     });
-    expect(results.every((result) => result.send.length <= 3 && result.receive.length <= 3)).toBe(true);
-    expect(tradePackages(mine, 3).some((items) => items.length === 3)).toBe(true);
+    expect(
+      results.every(
+        (result) => result.send.length <= 3 && result.receive.length <= 3,
+      ),
+    ).toBe(true);
+    expect(tradePackages(mine, 3).some((items) => items.length === 3)).toBe(
+      true,
+    );
     expect(supportedAutomaticTradeShape(3, 3)).toBe(true);
     expect(supportedAutomaticTradeShape(1, 3)).toBe(false);
   });
 
   it("diversifies the first result round across opponents", () => {
     const rosters = Array.from({ length: 9 }, (_, index) =>
-      theirs.map((item, playerIndex) => ({ ...item, id: `t${index}-${playerIndex}`, teamId: `team-${index}` })),
+      theirs.map((item, playerIndex) => ({
+        ...item,
+        id: `t${index}-${playerIndex}`,
+        teamId: `team-${index}`,
+      })),
     );
-    const results = findTradeSuggestions({ myRoster: mine, otherRosters: rosters, rosterPositions: slots });
-    expect(new Set(results.slice(0, 9).map((result) => result.opponentTeamId)).size).toBe(9);
-    expect(results.filter((result) => result.opponentTeamId === "team-0").length).toBeLessThanOrEqual(2);
+    const results = findTradeSuggestions({
+      myRoster: mine,
+      otherRosters: rosters,
+      rosterPositions: slots,
+    });
+    expect(
+      new Set(results.slice(0, 9).map((result) => result.opponentTeamId)).size,
+    ).toBe(9);
+    expect(
+      results.filter((result) => result.opponentTeamId === "team-0").length,
+    ).toBeLessThanOrEqual(2);
   });
 
   it("does not let a third low-value bench filler dominate roster impact", () => {
@@ -266,7 +293,11 @@ describe("Trade Finder", () => {
       receive: [theirs[0], theirs[3], player("filler", "other", "QB", 1, 1)],
       rosterPositions: slots,
     });
-    expect(Math.abs(withFiller.myImpact.effectiveDelta - base.myImpact.effectiveDelta)).toBeLessThan(2);
+    expect(
+      Math.abs(
+        withFiller.myImpact.effectiveDelta - base.myImpact.effectiveDelta,
+      ),
+    ).toBeLessThan(2);
   });
 
   it("penalizes a trade that leaves a required lineup slot empty", () => {
@@ -287,7 +318,9 @@ describe("Trade Finder", () => {
     });
     expect(result.myImpact.completeBefore).toBe(true);
     expect(result.myImpact.completeAfter).toBe(false);
-    expect(result.reasons).toContain("Trade creates an unfilled starting-lineup slot");
+    expect(result.reasons).toContain(
+      "Trade creates an unfilled starting-lineup slot",
+    );
   });
 
   it("honors Superflex eligibility during trade simulation", () => {
@@ -314,7 +347,10 @@ describe("Trade Finder", () => {
   it("gives useful first-line depth much more utility than an RB6-level addition", () => {
     const starter = player("starter", "mine", "RB", 30, 17);
     const usefulBefore = [starter, player("weak-rb3", "mine", "RB", 7, 5)];
-    const usefulAfter = [...usefulBefore, player("useful-rb3", "mine", "RB", 18, 10)];
+    const usefulAfter = [
+      ...usefulBefore,
+      player("useful-rb3", "mine", "RB", 18, 10),
+    ];
     const deepBefore = [
       starter,
       player("rb3", "mine", "RB", 20, 11),
@@ -322,10 +358,12 @@ describe("Trade Finder", () => {
       player("rb5", "mine", "RB", 10, 7),
     ];
     const deepAfter = [...deepBefore, player("rb6", "mine", "RB", 10, 7.5)];
-    const usefulGain = calculateMarginalDepthUtility(usefulAfter, [starter.id])
-      - calculateMarginalDepthUtility(usefulBefore, [starter.id]);
-    const buriedGain = calculateMarginalDepthUtility(deepAfter, [starter.id])
-      - calculateMarginalDepthUtility(deepBefore, [starter.id]);
+    const usefulGain =
+      calculateMarginalDepthUtility(usefulAfter, [starter.id]) -
+      calculateMarginalDepthUtility(usefulBefore, [starter.id]);
+    const buriedGain =
+      calculateMarginalDepthUtility(deepAfter, [starter.id]) -
+      calculateMarginalDepthUtility(deepBefore, [starter.id]);
     expect(usefulGain).toBeGreaterThan(0.4);
     expect(buriedGain).toBeLessThan(0.1);
     expect(usefulGain).toBeGreaterThan(buriedGain * 8);
@@ -421,9 +459,17 @@ describe("Trade Finder", () => {
     });
     const twoForThree = evaluateTrade({
       myRoster: [...mine, player("my-filler", "mine", "TE", 1, 1)],
-      opponentRoster: [...theirs, player("opp-filler", "other", "WR", 1, 1), player("opp-filler2", "other", "RB", 1, 1)],
+      opponentRoster: [
+        ...theirs,
+        player("opp-filler", "other", "WR", 1, 1),
+        player("opp-filler2", "other", "RB", 1, 1),
+      ],
       send: [mine[1], mine[2]],
-      receive: [theirs[1], player("opp-filler", "other", "WR", 1, 1), player("opp-filler2", "other", "RB", 1, 1)],
+      receive: [
+        theirs[1],
+        player("opp-filler", "other", "WR", 1, 1),
+        player("opp-filler2", "other", "RB", 1, 1),
+      ],
       rosterPositions: slots,
     });
     expect(oneForOne.packageComplexityAdjustment).toBe(0);
@@ -441,12 +487,23 @@ describe("Trade Finder", () => {
   });
 
   it("preserves the best trade then prefers a similarly strong different shape", () => {
-    const makeSuggestion = (sendSize: number, receiveSize: number, score: number): TradeSuggestion => {
-      const send = Array.from({ length: sendSize }, (_, index) => player(`send-${sendSize}-${index}`, "mine", "RB", 10, 8));
-      const receive = Array.from({ length: receiveSize }, (_, index) => player(`receive-${receiveSize}-${index}`, "other", "WR", 10, 8));
+    const makeSuggestion = (
+      sendSize: number,
+      receiveSize: number,
+      score: number,
+    ): TradeSuggestion => {
+      const send = Array.from({ length: sendSize }, (_, index) =>
+        player(`send-${sendSize}-${index}`, "mine", "RB", 10, 8),
+      );
+      const receive = Array.from({ length: receiveSize }, (_, index) =>
+        player(`receive-${receiveSize}-${index}`, "other", "WR", 10, 8),
+      );
       const evaluated = evaluateTrade({
         myRoster: [...send, player("my-qb-fixture", "mine", "QB", 20, 18)],
-        opponentRoster: [...receive, player("opp-qb-fixture", "other", "QB", 20, 18)],
+        opponentRoster: [
+          ...receive,
+          player("opp-qb-fixture", "other", "QB", 20, 18),
+        ],
         send,
         receive,
         rosterPositions: ["QB", "FLEX", "FLEX", "BN", "BN", "BN"],
@@ -461,8 +518,8 @@ describe("Trade Finder", () => {
     expect(similar[0].tradeShape).toBe("1-for-1");
     expect(similar[1].tradeShape).toBe("2-for-2");
     expect(similar[0].score).toBe(9);
-    expect(similar[1].recommendationShapeAdjustment).toBeCloseTo(0.3);
-    expect(similar[1].finalRecommendationScore).toBeCloseTo(8.8);
+    expect(similar[1].recommendationShapeAdjustment).toBeCloseTo(0.5);
+    expect(similar[1].finalRecommendationScore).toBeCloseTo(9);
 
     const clearlySuperior = diversifyTradeSuggestions([
       makeSuggestion(1, 1, 9.5),
@@ -570,10 +627,12 @@ describe("Trade Finder", () => {
       base.opponentImpact.rosterHoleAdjustment,
     );
     expect(withUnsupportedSlots.finalTradeFit).toBe(base.finalTradeFit);
-    expect([
+    expect(
+      [
       ...withUnsupportedSlots.myImpact.lineupNotes,
       ...withUnsupportedSlots.opponentImpact.lineupNotes,
-    ].join(" ")).not.toMatch(/starter is available for (K|DEF|DST|D\/ST)/);
+      ].join(" "),
+    ).not.toMatch(/starter is available for (K|DEF|DST|D\/ST)/);
   });
 
   it("does not let kicker or defense assets create value, depth, or need adjustments", () => {
@@ -646,9 +705,11 @@ describe("Trade Finder", () => {
       rosterPositions: ["RB", "RB", "WR", "WR"],
     });
 
-    expect(result.myImpact.lineupChanges.benchReplacements.map((item) => item.playerId)).toEqual(
-      expect.arrayContaining(["rb-backup", "wr-backup"]),
-    );
+    expect(
+      result.myImpact.lineupChanges.benchReplacements.map(
+        (item) => item.playerId,
+      ),
+    ).toEqual(expect.arrayContaining(["rb-backup", "wr-backup"]));
     expect(result.myImpact.starterPpgDelta).toBe(-7);
   });
 
@@ -726,17 +787,209 @@ describe("Trade Finder", () => {
 
     expect(result.myImpact.lineupNotes.length).toBeGreaterThan(0);
     expect(result.opponentImpact.lineupNotes.length).toBeGreaterThan(0);
-    expect(new Set(result.myImpact.lineupNotes).size).toBe(result.myImpact.lineupNotes.length);
-    expect(new Set(result.opponentImpact.lineupNotes).size).toBe(result.opponentImpact.lineupNotes.length);
-    expect(result.myImpact.lineupChanges.benchReplacements.map((item) => item.playerId)).toContain("my-backup");
-    expect(result.opponentImpact.lineupChanges.benchReplacements.map((item) => item.playerId)).toContain("their-backup");
+    expect(new Set(result.myImpact.lineupNotes).size).toBe(
+      result.myImpact.lineupNotes.length,
+    );
+    expect(new Set(result.opponentImpact.lineupNotes).size).toBe(
+      result.opponentImpact.lineupNotes.length,
+    );
+    expect(
+      result.myImpact.lineupChanges.benchReplacements.map(
+        (item) => item.playerId,
+      ),
+    ).toContain("my-backup");
+    expect(
+      result.opponentImpact.lineupChanges.benchReplacements.map(
+        (item) => item.playerId,
+      ),
+    ).toContain("their-backup");
   });
 
   it("allows a strong 3-for-3 recommendation into the diverse result set", () => {
     const send = [mine[0], mine[1], mine[2]];
     const receive = [theirs[0], theirs[1], theirs[2]];
-    const evaluated = evaluateTrade({ myRoster: mine, opponentRoster: theirs, send, receive, rosterPositions: slots });
-    const suggestion: TradeSuggestion = { ...evaluated, opponentTeamId: "other", score: 110 };
-    expect(diversifyTradeSuggestions([suggestion])[0].tradeShape).toBe("3-for-3");
+    const evaluated = evaluateTrade({
+      myRoster: mine,
+      opponentRoster: theirs,
+      send,
+      receive,
+      rosterPositions: slots,
+    });
+    const suggestion: TradeSuggestion = {
+      ...evaluated,
+      opponentTeamId: "other",
+      score: 110,
+    };
+    expect(diversifyTradeSuggestions([suggestion])[0].tradeShape).toBe(
+      "3-for-3",
+    );
+  });
+
+  it("applies send and receive counts before scoring candidate packages", () => {
+    const results = findTradeSuggestions({
+      myRoster: [...mine, player("my-te-filter", "mine", "TE", 7)],
+      otherRosters: [[...theirs, player("their-wr-filter", "other", "WR", 9)]],
+      rosterPositions: slots,
+      valueWindow: 0.6,
+      filters: { sendCount: 2, receiveCount: 3, minimumFairness: 0 },
+    });
+    expect(results.length).toBeGreaterThan(0);
+    expect(
+      results.every(
+        (result) => result.send.length === 2 && result.receive.length === 3,
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    [1, 1],
+    [2, 2],
+    [3, 3],
+    [1, 2],
+    [2, 1],
+    [2, 3],
+    [3, 2],
+  ] as const)("supports the %i-for-%i package filter", (sendCount, receiveCount) => {
+    const positions = ["QB", "RB", "RB", "WR", "WR", "TE"];
+    const roster = (teamId: string) => positions.map((position, index) =>
+      player(`${teamId}-${index}`, teamId, position, 10, 7 + index / 10));
+    const results = findTradeSuggestions({
+      myRoster: roster("shape-mine"),
+      otherRosters: [roster("shape-other")],
+      rosterPositions: ["QB", "RB", "WR", "TE", "FLEX", "BN"],
+      valueWindow: 0.8,
+      filters: { sendCount, receiveCount, minimumFairness: 0 },
+    });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((result) =>
+      result.send.length === sendCount && result.receive.length === receiveCount)).toBe(true);
+  });
+
+  it("anchors every selected outgoing asset without running an unrestricted search first", () => {
+    const results = findTradeSuggestions({
+      myRoster: [...mine, player("my-te-anchor", "mine", "TE", 7)],
+      otherRosters: [[...theirs, player("their-wr-anchor", "other", "WR", 8)]],
+      rosterPositions: slots,
+      valueWindow: 0.6,
+      requiredPlayerIds: ["my-rb", "my-wr"],
+      filters: { sendCount: 2, minimumFairness: 0 },
+    });
+    expect(results.length).toBeGreaterThan(0);
+    expect(
+      results.every(
+        (result) =>
+          result.send
+            .map((item) => item.id)
+            .sort()
+            .join("|") === "my-rb|my-wr",
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves an explicitly selected lower-value player outside the default top-12 pool", () => {
+    const deepRoster = Array.from({ length: 14 }, (_, index) =>
+      player(`deep-${index}`, "mine", index % 2 ? "WR" : "RB", 30 - index));
+    const selectedId = "deep-13";
+    const results = findTradeSuggestions({
+      myRoster: deepRoster,
+      otherRosters: [[
+        ...theirs,
+        player("low-return", "other", "WR", 17),
+        player("low-return-2", "other", "RB", 8),
+      ]],
+      rosterPositions: slots,
+      requiredPlayerIds: [selectedId],
+      valueWindow: 0.8,
+      filters: { minimumFairness: 0 },
+    });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((result) => result.send.some((item) => item.id === selectedId))).toBe(true);
+  });
+
+  it("filters wanted and outgoing positions during bounded package generation", () => {
+    const results = findTradeSuggestions({
+      myRoster: mine,
+      otherRosters: [theirs],
+      rosterPositions: slots,
+      valueWindow: 0.6,
+      filters: {
+        sendPosition: "RB",
+        receivePosition: "WR",
+        minimumFairness: 0,
+      },
+    });
+    expect(results.length).toBeGreaterThan(0);
+    expect(
+      results.every((result) =>
+        result.send.some((item) => item.position === "RB"),
+      ),
+    ).toBe(true);
+    expect(
+      results.every((result) =>
+        result.receive.some((item) => item.position === "WR"),
+      ),
+    ).toBe(true);
+  });
+
+  it("translates depth utility and asymmetric lineup effects into football language", () => {
+    const result = evaluateTrade({
+      myRoster: [
+        player("my-rb-starter", "mine", "RB", 16, 9),
+        player("my-wr-depth", "mine", "WR", 7, 5),
+      ],
+      opponentRoster: [player("incoming-rb", "other", "RB", 26, 16)],
+      send: [
+        player("my-rb-starter", "mine", "RB", 16, 9),
+        player("my-wr-depth", "mine", "WR", 7, 5),
+      ],
+      receive: [player("incoming-rb", "other", "RB", 26, 16)],
+      rosterPositions: ["RB", "BN"],
+    });
+    expect(classifyDepthImpact(result.myImpact)).toMatch(
+      /Depth (Loss|Upgrade)|Neutral Depth/,
+    );
+    expect(describeDepthImpact(result.myImpact)).not.toMatch(/[-+]\d+\.\d+/);
+    expect(describeTradeImpact(result.myImpact, 2, 1)).toMatch(
+      /projected starting-lineup PPG|Consolidation trade/,
+    );
+  });
+
+  it("slightly prefers a balanced package only when recommendation quality is comparable", () => {
+    const make = (
+      sendSize: number,
+      receiveSize: number,
+      score: number,
+    ): TradeSuggestion => {
+      const send = Array.from({ length: sendSize }, (_, index) =>
+        player(`balanced-send-${sendSize}-${index}`, "mine", "RB", 10, 8),
+      );
+      const receive = Array.from({ length: receiveSize }, (_, index) =>
+        player(
+          `balanced-receive-${receiveSize}-${index}`,
+          "other",
+          "WR",
+          10,
+          8,
+        ),
+      );
+      const evaluated = evaluateTrade({
+        myRoster: send,
+        opponentRoster: receive,
+        send,
+        receive,
+        rosterPositions: ["FLEX", "BN", "BN"],
+      });
+      return { ...evaluated, opponentTeamId: "balanced-other", score };
+    };
+    const selected = diversifyTradeSuggestions([
+      make(2, 1, 9.3),
+      make(2, 2, 9),
+    ]);
+    expect(selected[0].tradeShape).toBe("2-for-2");
+    const clearlyBetter = diversifyTradeSuggestions([
+      make(2, 1, 12),
+      make(2, 2, 9),
+    ]);
+    expect(clearlyBetter[0].tradeShape).toBe("2-for-1");
   });
 });

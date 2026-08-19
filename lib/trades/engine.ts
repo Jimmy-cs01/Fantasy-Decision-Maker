@@ -102,6 +102,15 @@ export interface TradeSuggestion {
   score: number;
 }
 
+export interface TradeSearchFilters {
+  sendCount?: 1 | 2 | 3 | null;
+  receiveCount?: 1 | 2 | 3 | null;
+  sendPosition?: string | null;
+  receivePosition?: string | null;
+  minimumFairness?: number;
+  starterUpgradeOnly?: boolean;
+}
+
 export interface TradeFitComponents {
   starterPpgDelta: number;
   assetValueDelta: number;
@@ -126,6 +135,17 @@ export const TRADE_SEARCH_LIMITS = {
   shapeDiversityCloseness: 1.5,
 } as const;
 
+const RECOMMENDATION_SHAPE_PREFERENCE: Record<TradeShape, number> = {
+  "1-for-1": 0.2,
+  "2-for-2": 0.45,
+  "3-for-3": 0.35,
+  "1-for-2": 0,
+  "2-for-1": 0,
+  "2-for-3": -0.05,
+  "3-for-2": -0.05,
+  other: -0.1,
+};
+
 const round = (value: number) => Math.round(value * 10) / 10;
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.max(minimum, Math.min(maximum, value));
@@ -136,6 +156,50 @@ export function tradeTotals(send: TradePlayer[], receive: TradePlayer[]) {
   const difference = receiveValue - sendValue;
   const denominator = Math.max(1, (sendValue + receiveValue) / 2);
   return { sendValue, receiveValue, difference, percentageDifference: Math.abs(difference) / denominator };
+}
+
+export type DepthImpactClassification = "Major Depth Upgrade" | "Depth Upgrade" | "Slight Depth Upgrade" | "Neutral Depth" | "Slight Depth Loss" | "Depth Loss" | "Major Depth Loss";
+
+export function classifyDepthImpact(impact: TeamTradeImpact): DepthImpactClassification {
+  if (!impact.completeAfter || impact.lineupChanges.unfilledSlots.length) return "Major Depth Loss";
+  if (impact.depthDelta >= 0.8) return "Major Depth Upgrade";
+  if (impact.depthDelta >= 0.3) return "Depth Upgrade";
+  if (impact.depthDelta >= 0.08) return "Slight Depth Upgrade";
+  if (impact.depthDelta <= -0.8) return "Major Depth Loss";
+  if (impact.depthDelta <= -0.3) return "Depth Loss";
+  if (impact.depthDelta <= -0.08) return "Slight Depth Loss";
+  return "Neutral Depth";
+}
+
+function positionList(players: LineupChangePlayer[]) {
+  return [...new Set(players.flatMap((player) => player.position ? [player.position] : []))];
+}
+
+export function describeDepthImpact(impact: TeamTradeImpact) {
+  const classification = classifyDepthImpact(impact);
+  const benchPositions = positionList(impact.lineupChanges.incomingBench);
+  if (impact.lineupChanges.unfilledSlots.length) return `${classification}: leaves ${impact.lineupChanges.unfilledSlots.join(", ")} without a projected starter`;
+  if (impact.droppedPlayerIds.length && impact.depthDelta < -0.08) return `${classification}: roster limits cost ${impact.droppedPlayerIds.length} additional bench player${impact.droppedPlayerIds.length === 1 ? "" : "s"}`;
+  if (impact.lineupChanges.incomingBench.length >= 2 && impact.depthDelta > 0.08) return `${classification}: adds ${impact.lineupChanges.incomingBench.length} usable bench options${benchPositions.length ? ` at ${benchPositions.join("/")}` : ""}`;
+  if (impact.lineupChanges.incomingBench.length === 1 && impact.depthDelta > 0.08) return `${classification}: adds a usable ${benchPositions[0] ?? "bench"} option`;
+  if (impact.depthDelta < -0.08) return `${classification}: reduces useful injury and bye-week coverage`;
+  if (impact.depthDelta > 0.08) return `${classification}: improves useful injury and bye-week coverage`;
+  return classification;
+}
+
+export function describeTradeImpact(impact: TeamTradeImpact, outgoingCount: number, incomingCount: number) {
+  const delta = Math.abs(impact.starterPpgDelta).toFixed(1);
+  const depth = classifyDepthImpact(impact);
+  const incomingStarters = impact.lineupChanges.incomingStarters.length;
+  if (impact.starterPpgDelta > 0.4 && impact.depthDelta < -0.08) return `Gain ${delta} projected starting-lineup PPG, but accept a ${depth.toLowerCase()}.`;
+  if (impact.starterPpgDelta < -0.4 && impact.depthDelta > 0.08) return `Lose ${delta} projected starting-lineup PPG, but gain a ${depth.toLowerCase()}.`;
+  if (outgoingCount > incomingCount && incomingStarters > 0) return `Consolidation trade: turns ${outgoingCount} assets into ${incomingStarters === 1 ? "one clear weekly starter" : `${incomingStarters} projected starters`}.`;
+  if (incomingCount > outgoingCount && incomingStarters === 0) return "Adds roster depth, but no incoming player currently improves your optimal lineup.";
+  if (impact.starterPpgDelta > 0.4) return `Improves your projected starting lineup by ${delta} PPG.`;
+  if (impact.starterPpgDelta < -0.4) return `Reduces your projected starting lineup by ${delta} PPG.`;
+  if (impact.depthDelta > 0.08) return `Starting lineup stays similar while the trade provides a ${depth.toLowerCase()}.`;
+  if (impact.depthDelta < -0.08) return `Starting lineup stays similar, but the trade creates a ${depth.toLowerCase()}.`;
+  return "Projected starting lineup and useful roster depth remain nearly neutral.";
 }
 
 export function tradePackages(
@@ -598,7 +662,8 @@ function packageComplexityAdjustmentFor(shape: TradeShape) {
 
 export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit = TRADE_SEARCH_LIMITS.maxResults) {
   const groups = new Map<string, TradeSuggestion[]>();
-  for (const suggestion of [...suggestions].sort((left, right) => right.score - left.score)) {
+  const recommendationScore = (suggestion: TradeSuggestion) => suggestion.score + RECOMMENDATION_SHAPE_PREFERENCE[suggestion.tradeShape];
+  for (const suggestion of [...suggestions].sort((left, right) => recommendationScore(right) - recommendationScore(left) || right.score - left.score)) {
     groups.set(suggestion.opponentTeamId, [...(groups.get(suggestion.opponentTeamId) ?? []), suggestion]);
   }
   const selectedByOpponent = new Map<string, TradeSuggestion[]>();
@@ -607,8 +672,8 @@ export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit 
     const best = group[0];
     selectedByOpponent.set(opponentId, [{
       ...best,
-      recommendationShapeAdjustment: 0,
-      finalRecommendationScore: best.score,
+      recommendationShapeAdjustment: RECOMMENDATION_SHAPE_PREFERENCE[best.tradeShape],
+      finalRecommendationScore: round(recommendationScore(best)),
     }]);
     selectedShapeCounts.set(best.tradeShape, (selectedShapeCounts.get(best.tradeShape) ?? 0) + 1);
   }
@@ -624,9 +689,11 @@ export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit 
             && candidate.score >= strongestRemaining.score - TRADE_SEARCH_LIMITS.shapeDiversityCloseness)
         .sort((left, right) =>
           (selectedShapeCounts.get(left.tradeShape) ?? 0) - (selectedShapeCounts.get(right.tradeShape) ?? 0)
-            || right.score - left.score)[0];
+            || RECOMMENDATION_SHAPE_PREFERENCE[right.tradeShape] - RECOMMENDATION_SHAPE_PREFERENCE[left.tradeShape]
+            || recommendationScore(right) - recommendationScore(left))[0];
       const choice = alternateShape ?? strongestRemaining;
-      const recommendationShapeAdjustment = round(Math.max(0, strongestRemaining.score - choice.score));
+      const recommendationShapeAdjustment = round(RECOMMENDATION_SHAPE_PREFERENCE[choice.tradeShape]
+        + Math.max(0, recommendationScore(strongestRemaining) - recommendationScore(choice)));
       choices.push({
         ...choice,
         recommendationShapeAdjustment,
@@ -645,14 +712,27 @@ export function diversifyTradeSuggestions(suggestions: TradeSuggestion[], limit 
   return selected;
 }
 
-function boundedCandidatePackages(players: TradePlayer[], requiredPlayerId?: string | null) {
-  const oneAndTwo = tradePackages(players, 2, requiredPlayerId);
+function boundedCandidatePackages(players: TradePlayer[], requiredPlayerIds: string[] = [], exactSize?: number | null) {
+  if (requiredPlayerIds.length > (exactSize ?? 3)) return [];
+  const includesRequired = (items: TradePlayer[]) => requiredPlayerIds.every((id) => items.some((player) => player.id === id));
+  if (requiredPlayerIds.some((id) => !players.some((player) => player.id === id))) return [];
+  const seedRequiredId = requiredPlayerIds[0] ?? null;
+  const oneAndTwo = exactSize === 3 ? [] : tradePackages(players, exactSize ?? 2, seedRequiredId)
+    .filter((items) => includesRequired(items) && (!exactSize || items.length === exactSize));
   let threePlayerPool = players.slice(0, TRADE_SEARCH_LIMITS.threePlayerPool);
-  if (requiredPlayerId && !threePlayerPool.some((player) => player.id === requiredPlayerId)) {
-    const required = players.find((player) => player.id === requiredPlayerId);
-    if (required) threePlayerPool = [...threePlayerPool.slice(0, TRADE_SEARCH_LIMITS.threePlayerPool - 1), required];
+  for (const requiredPlayerId of requiredPlayerIds) {
+    if (!threePlayerPool.some((player) => player.id === requiredPlayerId)) {
+      const required = players.find((player) => player.id === requiredPlayerId);
+      if (required) {
+        const requiredSet = new Set(requiredPlayerIds);
+        const reverseIndex = [...threePlayerPool].reverse().findIndex((player) => !requiredSet.has(player.id));
+        const replaceIndex = reverseIndex < 0 ? threePlayerPool.length - 1 : threePlayerPool.length - 1 - reverseIndex;
+        threePlayerPool = [...threePlayerPool.slice(0, replaceIndex), required, ...threePlayerPool.slice(replaceIndex + 1)];
+      }
+    }
   }
-  return [...oneAndTwo, ...tradePackages(threePlayerPool, 3, requiredPlayerId).filter((items) => items.length === 3)];
+  const threes = exactSize && exactSize !== 3 ? [] : tradePackages(threePlayerPool, 3, seedRequiredId).filter((items) => items.length === 3 && includesRequired(items));
+  return [...oneAndTwo, ...threes];
 }
 
 function retainBestCandidate<T extends { preliminary: number }>(candidates: T[], candidate: T) {
@@ -666,23 +746,40 @@ export function findTradeSuggestions(options: {
   otherRosters: TradePlayer[][];
   rosterPositions: string[];
   specificPlayerId?: string | null;
+  requiredPlayerIds?: string[];
+  filters?: TradeSearchFilters;
   valueWindow?: number;
   leagueTeams?: number;
 }) {
-  const candidates = (roster: TradePlayer[]) => roster
-    .filter(
-      (player) =>
-        (player.value ?? 0) >= 1 &&
-        isTradeEvaluationSupportedSlot(player.position),
-    )
-    .sort((left, right) => (right.value ?? 0) - (left.value ?? 0))
-    .slice(0, TRADE_SEARCH_LIMITS.playersPerTeam);
-  const outgoingPackages = boundedCandidatePackages(candidates(options.myRoster), options.specificPlayerId);
+  const requiredPlayerIds = [...new Set([
+    ...(options.requiredPlayerIds ?? []),
+    ...(options.specificPlayerId ? [options.specificPlayerId] : []),
+  ])].slice(0, TRADE_SEARCH_LIMITS.maxPackageSize);
+  const candidates = (roster: TradePlayer[], preserveIds: string[] = []) => {
+    const eligible = roster
+      .filter((player) => (player.value ?? 0) >= 1 && isTradeEvaluationSupportedSlot(player.position))
+      .sort((left, right) => (right.value ?? 0) - (left.value ?? 0));
+    const selected = eligible.slice(0, TRADE_SEARCH_LIMITS.playersPerTeam);
+    const preserveSet = new Set(preserveIds);
+    for (const id of preserveIds) {
+      if (selected.some((player) => player.id === id)) continue;
+      const required = eligible.find((player) => player.id === id);
+      if (!required) continue;
+      const replaceIndex = [...selected].reverse().findIndex((player) => !preserveSet.has(player.id));
+      const actualIndex = replaceIndex < 0 ? selected.length - 1 : selected.length - 1 - replaceIndex;
+      selected.splice(actualIndex, 1, required);
+    }
+    return selected.sort((left, right) => (right.value ?? 0) - (left.value ?? 0));
+  };
+  const filters = options.filters ?? {};
+  const outgoingPackages = boundedCandidatePackages(candidates(options.myRoster, requiredPlayerIds), requiredPlayerIds, filters.sendCount)
+    .filter((items) => !filters.sendPosition || items.some((player) => player.position?.toUpperCase() === filters.sendPosition?.toUpperCase()));
   const valueWindow = options.valueWindow ?? TRADE_SEARCH_LIMITS.valueWindow;
   const finalists: Array<{ opponentRoster: TradePlayer[]; send: TradePlayer[]; receive: TradePlayer[]; preliminary: number }> = [];
 
   for (const opponentRoster of options.otherRosters) {
-    const incomingPackages = valuedPackages(boundedCandidatePackages(candidates(opponentRoster)));
+    const incomingPackages = valuedPackages(boundedCandidatePackages(candidates(opponentRoster), [], filters.receiveCount)
+      .filter((items) => !filters.receivePosition || items.some((player) => player.position?.toUpperCase() === filters.receivePosition?.toUpperCase())));
     const opponentCandidatesByShape = new Map<TradeShape, typeof finalists>();
     const seen = new Set<string>();
     for (const send of outgoingPackages) {
@@ -726,6 +823,8 @@ export function findTradeSuggestions(options: {
       opponentTeamId: candidate.opponentRoster[0]?.teamId ?? "unknown",
       score: evaluation.tradeFairnessScore + evaluation.finalTradeFit,
     };
-  }).filter((suggestion) => suggestion.tradeFairnessScore >= 45);
+  }).filter((suggestion) =>
+    suggestion.tradeFairnessScore >= (filters.minimumFairness ?? 45)
+      && (!filters.starterUpgradeOnly || suggestion.myImpact.starterPpgDelta > 0.25));
   return diversifyTradeSuggestions(scored, TRADE_SEARCH_LIMITS.maxResults);
 }

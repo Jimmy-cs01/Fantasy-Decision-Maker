@@ -150,12 +150,17 @@ export default async function TradesPage({
           rosterPositions={league.roster_positions ?? []}
           analyticsAvailable={analytics.analyticsAvailable}
           leagueTeams={Number(league.total_rosters ?? teams.length ?? 10)}
+          projectionLabel={
+            analytics.projectionSeason && analytics.projectionWeek
+              ? `${analytics.projectionSeason} W${analytics.projectionWeek}`
+              : null
+          }
         />
       </div>
       <p className="mt-4 text-xs text-slate-500">
         Searches the top 12 rostered assets per team, including bounded 2-for-3
-        packages, before simulating both optimized lineups. It does not
-        estimate acceptance probability.
+        packages, before simulating both optimized lineups. It does not estimate
+        acceptance probability.
       </p>
     </div>
   );
