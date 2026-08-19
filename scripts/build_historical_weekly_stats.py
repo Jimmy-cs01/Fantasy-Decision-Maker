@@ -17,6 +17,7 @@ MAPPING_FILE = Path("data/player_id_mapping.csv")
 PROCESSED_DIR = Path("data/processed")
 IDENTITY_OUTPUT = PROCESSED_DIR / "player_identity.csv"
 WEEKLY_OUTPUT = PROCESSED_DIR / "historical_weekly_player_stats.csv"
+SNAP_INPUT = PROCESSED_DIR / "player_weekly_snap_statistics.csv.gz"
 FANTASY_POSITIONS = {"QB", "RB", "WR", "TE"}
 SOURCE_COLUMNS = [
     "player_id", "player_display_name", "position", "position_group", "headshot_url", "season", "week",
@@ -55,7 +56,8 @@ WEEKLY_COLUMNS = [
     "yards_per_target", "yards_per_reception", "receiving_adot", "receiving_touchdowns",
     "receiving_first_downs", "receiving_epa", "racr", "target_share", "air_yards_share",
     "wopr", "true_touches", "total_yards", "total_touchdowns", "fantasy_points_standard",
-    "fantasy_points_half_ppr", "fantasy_points_ppr", "source", "source_dataset",
+    "fantasy_points_half_ppr", "fantasy_points_ppr", "offense_snaps", "team_offense_snaps",
+    "offense_snap_percentage", "source", "source_dataset",
     "source_season",
 ]
 LOGICAL_KEY = ["player_id", "season", "week", "season_type", "game_id"]
@@ -183,10 +185,36 @@ def normalize_weekly(source: pd.DataFrame) -> pd.DataFrame:
         ~is_qb, frame["passing_touchdowns"].fillna(0) + frame["rushing_touchdowns"].fillna(0)
     )
     frame["fantasy_points_half_ppr"] = frame["fantasy_points_standard"] + 0.5 * frame["receptions"]
+    frame["offense_snaps"] = pd.NA
+    frame["team_offense_snaps"] = pd.NA
+    frame["offense_snap_percentage"] = pd.NA
     frame["source"] = "nflverse"
     frame["source_dataset"] = "player_stats"
     frame["source_season"] = frame["season"]
     return frame[WEEKLY_COLUMNS]
+
+
+def attach_snap_counts(weekly: pd.DataFrame, snaps: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, int | float]]:
+    """Attach trusted PFR snap rows without changing weekly-stat identity."""
+    keys = ["player_id", "season", "week", "season_type", "team"]
+    required = set(keys + ["offensive_snaps", "team_offensive_snaps", "offensive_snap_pct"])
+    missing = required - set(snaps.columns)
+    if missing:
+        raise ValueError(f"Snap input is missing required columns: {sorted(missing)}")
+    if snaps.duplicated(keys).any() or weekly.duplicated(keys).any():
+        raise ValueError("Snap input contains duplicate player-game-team rows.")
+    output = weekly.drop(columns=["offense_snaps", "team_offense_snaps", "offense_snap_percentage"], errors="ignore").merge(
+        snaps[keys + ["offensive_snaps", "team_offensive_snaps", "offensive_snap_pct"]].rename(columns={
+            "offensive_snaps": "offense_snaps", "team_offensive_snaps": "team_offense_snaps",
+            "offensive_snap_pct": "offense_snap_percentage",
+        }), on=keys, how="left", validate="one_to_one",
+    )
+    matched = int(output.offense_snaps.notna().sum())
+    eligible = int(output.season.between(int(snaps.season.min()), int(snaps.season.max())).sum())
+    return output[WEEKLY_COLUMNS], {
+        "matched": matched, "eligible": eligible,
+        "coverage_pct": round(100 * matched / eligible, 4) if eligible else 0.0,
+    }
 
 
 def build_identity(source: pd.DataFrame) -> tuple[pd.DataFrame, int]:
@@ -267,6 +295,10 @@ def main() -> None:
     print(f"Loading nflverse weekly player stats for {source_seasons[0]}–{source_seasons[-1]}...")
     source = load_nflverse()
     weekly = normalize_weekly(source)
+    snap_report = {"matched": 0, "eligible": 0, "coverage_pct": 0.0}
+    if SNAP_INPUT.exists():
+        snaps = pd.read_csv(SNAP_INPUT, dtype={"player_id": "string", "team": "string", "game_id": "string"})
+        weekly, snap_report = attach_snap_counts(weekly, snaps)
     duplicate_count = validate_weekly_stats(weekly)
     identity, added_identities = build_identity(source)
     unknown = set(weekly["player_id"]) - set(identity["player_id"])
@@ -291,6 +323,7 @@ def main() -> None:
     print(f"New GSIS identities added:  {added_identities:,}")
     print(f"REG rows:                   {(weekly['season_type'] == 'REG').sum():,}")
     print(f"POST rows:                  {(weekly['season_type'] == 'POST').sum():,}")
+    print(f"Weekly rows with SNAP:      {snap_report['matched']:,} / {snap_report['eligible']:,} ({snap_report['coverage_pct']:.2f}%)")
     print("\nRows by season/type:")
     for (season, season_type), count in counts.items():
         print(f"  {season} {season_type}: {count:,}")
