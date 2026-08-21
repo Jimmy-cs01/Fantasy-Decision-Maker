@@ -2,6 +2,7 @@ import { Activity, Gauge, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { ProjectionResponse } from "@/lib/projections/types";
 import type { MatchupContext } from "@/lib/nfl/types";
+import { projectionScoringLabel } from "@/lib/projections/presentation";
 
 const labels: Record<string, string> = {
   passAttempts: "Pass Att", completions: "Comp", passingYards: "Pass Yds",
@@ -27,7 +28,7 @@ export function PlayerProjectionCard({ projection, position, matchup = null }: {
       <div>
         <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-cyan-300"><TrendingUp size={16} /> Week {projection.week} projection</div>
         <div className="mt-2 flex items-end gap-2"><span className="text-4xl font-black text-white">{value(projection.projectedPoints)}</span><span className="pb-1 text-sm font-semibold text-slate-400">projected points</span></div>
-        <p className="mt-1 text-xs text-slate-500">{projection.scoringMode === "league" ? "Selected Sleeper league scoring" : projection.scoringMode.replace("_", " ").toUpperCase()} · Model {projection.modelVersion}</p>
+        <p className="mt-1 text-xs text-slate-500">{projection.scoringMode === "league" ? "Selected Sleeper league scoring" : projectionScoringLabel(projection.scoringMode)} · Model {projection.modelVersion}</p>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[["Floor", projection.floor], ["Median", projection.median], ["Ceiling", projection.ceiling]].map(([label, amount]) => <div key={label as string} className="min-w-16 rounded-xl bg-slate-950/70 px-3 py-2"><p className="text-[10px] font-bold uppercase text-slate-500">{label}</p><p className="mt-1 font-black">{value(amount as number)}</p></div>)}

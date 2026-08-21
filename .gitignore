@@ -10,3 +10,7 @@ __pycache__/
 /artifacts/projections/
 data/*
 !data/player_mapping_overrides.csv
+
+# Supabase local development files
+supabase/.temp/
+supabase/.branches/

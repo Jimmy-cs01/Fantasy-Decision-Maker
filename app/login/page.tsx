@@ -4,6 +4,7 @@ import { AuthFrame } from "@/components/auth/auth-frame";
 import { safeReturnPath } from "@/lib/auth/validation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { signInWithPassword } from "../auth/actions";
+import { PasswordInput } from "@/components/auth/password-input";
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
@@ -85,14 +86,12 @@ export default async function LoginPage({
         </label>
         <label className="block text-sm font-bold text-slate-200">
           Password
-          <input
+          <PasswordInput
             required
             autoComplete="current-password"
             name="password"
-            type="password"
             minLength={6}
             placeholder="Your password"
-            className="mt-1.5 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-white transition outline-none placeholder:text-slate-600 focus:border-cyan-400"
           />
         </label>
         <div className="text-right">

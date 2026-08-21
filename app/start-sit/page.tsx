@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { getStartSitProjectionPool } from "@/lib/start-sit/service";
 import { resolveStartSitScoringSettings } from "@/lib/start-sit/decision";
 import { createClient } from "@/lib/supabase/server";
+import { projectionScoringLabel } from "@/lib/projections/presentation";
 
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
@@ -11,7 +12,9 @@ export default async function StartSitPage({ searchParams }: { searchParams: Pro
   const query = await searchParams;
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
-  const { data: leagues, error: leagueError } = await db.from("leagues").select("id,name,provider,total_rosters,roster_positions,scoring_settings,last_synced_at").eq("owner_id", user!.id).not("last_synced_at", "is", null).order("last_synced_at", { ascending: false });
+  const { data: leagues, error: leagueError } = user
+    ? await db.from("leagues").select("id,name,provider,total_rosters,roster_positions,scoring_settings,last_synced_at").eq("owner_id", user.id).not("last_synced_at", "is", null).order("last_synced_at", { ascending: false })
+    : { data: [], error: null };
   if (leagueError) throw new Error(`Unable to load Start / Sit leagues: ${leagueError.message}`);
   const league = leagues?.find((item) => item.id === first(query.leagueId)) ?? leagues?.[0] ?? null;
   const manual = first(query.scoring);
@@ -39,8 +42,8 @@ export default async function StartSitPage({ searchParams }: { searchParams: Pro
     }
   }
   return <div className="mx-auto max-w-6xl">
-    <header><p className="text-xs font-black tracking-[.2em] text-cyan-300">LINEUP DECISIONS</p><h1 className="mt-1 text-3xl font-black">Start / Sit</h1><p className="mt-2 text-sm text-slate-400">Compare Jimmy GM&apos;s final reconciled weekly projections. {rosterLabel} · {projectionPool.season ? `${projectionPool.season} Week ${projectionPool.week}` : "projection week unavailable"}.</p></header>
+    <header><p className="text-xs font-black tracking-[.2em] text-cyan-300">LINEUP DECISIONS</p><h1 className="mt-1 text-3xl font-black">Start / Sit</h1><p className="mt-2 text-sm text-slate-400">Compare Jimmy GM&apos;s final reconciled weekly projections. {rosterLabel} · {projectionScoringLabel(league ? "league" : scoringMode, league?.name)} · {projectionPool.season ? `${projectionPool.season} Week ${projectionPool.week}` : "projection week unavailable"}.</p></header>
     {leagues?.length ? <nav aria-label="Start Sit league" className="mt-4 flex gap-2 overflow-x-auto pb-1">{leagues.map((item) => <Link key={item.id} href={`/start-sit?leagueId=${item.id}`} className={`shrink-0 rounded-full border px-3 py-2 text-sm font-bold ${league?.id === item.id ? "border-cyan-300 bg-cyan-400/15 text-cyan-100" : "border-slate-800 text-slate-400"}`}>{item.name}</Link>)}</nav> : <form className="mt-4"><label className="text-xs font-bold text-slate-400">Scoring<select name="scoring" defaultValue={scoringMode} className="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"><option value="standard">Standard</option><option value="half_ppr">Half PPR</option><option value="ppr">PPR</option></select></label><button className="ml-2 rounded-lg bg-cyan-400 px-3 py-2 text-sm font-black text-slate-950">Apply</button></form>}
-    <div className="mt-5">{players.length ? <StartSitComparator players={players} rosterPositions={league?.roster_positions ?? []} /> : <Card className="text-center"><h2 className="font-bold">No roster projections available</h2><p className="mt-2 text-slate-400">Sync a league or import the current projection week to compare players.</p></Card>}</div>
+    <div className="mt-5">{players.length ? <StartSitComparator players={players} rosterPositions={league?.roster_positions ?? []} manualRoster={!league} /> : <Card className="text-center"><h2 className="font-bold">No roster projections available</h2><p className="mt-2 text-slate-400">Import the current projection week to compare players.</p></Card>}</div>
   </div>;
 }

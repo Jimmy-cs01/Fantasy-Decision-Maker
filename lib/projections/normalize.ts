@@ -1,4 +1,4 @@
-import { calculateProjectedFantasyPoints, scoringSettingsForMode } from "./scoring";
+import { displayedProjectionPoints } from "./presentation";
 import type { ProjectionRecord, ProjectionResponse, ProjectionScoringContext } from "./types";
 
 const round = (value: number) => Math.round(value * 10) / 10;
@@ -8,10 +8,12 @@ export function normalizeProjection(
   record: ProjectionRecord,
   context: ProjectionScoringContext,
 ): ProjectionResponse {
-  const settings = context.mode === "league"
-    ? context.settings ?? { rec: 1 }
-    : scoringSettingsForMode(context.mode);
-  const projectedPoints = calculateProjectedFantasyPoints(record.projected_stats, settings, context.position);
+  const projectedPoints = displayedProjectionPoints({
+    stats: record.projected_stats,
+    position: context.position,
+    mode: context.mode,
+    leagueSettings: context.settings,
+  });
   const modelVersion = Array.isArray(record.model_versions)
     ? record.model_versions[0]?.version
     : record.model_versions?.version;

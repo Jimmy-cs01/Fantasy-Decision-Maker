@@ -39,4 +39,18 @@ describe("unauthenticated route separation", () => {
     expect(source("./page.tsx")).toContain("redirect(`/login");
     expect(source("../login/page.tsx")).toContain("Forgot password?");
   });
+
+  it("uses the reusable accessible password input on every password form", () => {
+    const login = source("../login/page.tsx");
+    const signup = source("../signup/page.tsx");
+    expect(login).toMatch(/<PasswordInput[\s\S]*?name="password"/);
+    expect(login).not.toMatch(/<PasswordInput[\s\S]*?name="email"/);
+    expect(signup).toMatch(/<PasswordInput[\s\S]*?name="password"/);
+    expect(signup).toMatch(/<PasswordInput[\s\S]*?name="confirmPassword"/);
+    expect(signup).not.toMatch(/<PasswordInput[\s\S]*?name="email"/);
+    expect(source("./update-password/page.tsx").match(/<PasswordInput/g)).toHaveLength(2);
+    const input = source("../../components/auth/password-input.tsx");
+    expect(input).toContain('aria-label={visible ? "Hide password" : "Show password"}');
+    expect(input).toContain('type={visible ? "text" : "password"}');
+  });
 });

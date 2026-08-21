@@ -11,6 +11,7 @@ import { getAvailableSeasons, getPlayerLeaders, getProjectedPlayerLeaders, getSc
 import { DEFAULT_VALUE_LEAGUE } from "@/lib/player-values/config";
 import type { ProjectionLeaderSort } from "@/lib/players/types";
 import { publicPlayerDataMessage } from "@/lib/players/data-errors";
+import { projectionScoringLabel } from "@/lib/projections/presentation";
 
 const first = (input: string | string[] | undefined) => Array.isArray(input) ? input[0] : input;
 
@@ -130,14 +131,14 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       <div className="mt-3 sm:mt-4"><PositionFilterNav selected={filters.position} items={POSITIONS.map((position) => ({ position, href: href({ position, sort: mode === "projected" ? "player_value" : "fantasy_points", view: "leaders", page: 1 }) }))} /></div>
 
       <div className="mt-1 flex items-center justify-between gap-3 text-xs text-slate-500">
-        <p>{season ? `${activeResult.total.toLocaleString()} ${filters.position === "ALL" ? "fantasy players" : filters.position === "FLEX" ? "flex players" : `${filters.position}s`}` : "No season available"} · {mode === "projected" ? "PROJECTED" : filters.seasonType} · {scoring === "league" ? `${selectedLeague?.name} scoring` : scoring.replace("_", " ").toUpperCase()}</p>
+        <p>{season ? `${activeResult.total.toLocaleString()} ${filters.position === "ALL" ? "fantasy players" : filters.position === "FLEX" ? "flex players" : `${filters.position}s`}` : "No season available"} · {mode === "projected" ? "PROJECTED" : filters.seasonType} · {mode === "projected" ? projectionScoringLabel(scoring, selectedLeague?.name) : scoring === "league" ? `${selectedLeague?.name} scoring` : scoring.replace("_", " ").toUpperCase()}</p>
         <p className="shrink-0 sm:hidden">Swipe stats →</p>
       </div>
     </section>
 
     <div className="mt-3">
       {error ? <Card className="text-center"><h2 className="font-bold">Player data unavailable</h2><p className="mt-2 text-slate-400">{error}</p></Card>
-        : mode === "projected" && projectionResult.rows.length ? <ProjectedPlayerLeaderboard rows={projectionResult.rows} activeSort={projectionSort} leagueId={selectedLeague?.id} buildHref={href} />
+        : mode === "projected" && projectionResult.rows.length ? <ProjectedPlayerLeaderboard rows={projectionResult.rows} activeSort={projectionSort} leagueId={selectedLeague?.id} scoring={scoring} buildHref={href} />
         : result.rows.length && season ? <PlayerLeaderboard rows={result.rows} columns={columns} scoring={scoring} leagueId={selectedLeague?.id} activeSort={filters.sort} season={season} seasonType={filters.seasonType} page={filters.page} pageSize={result.pageSize} buildHref={href} />
           : <Card className="text-center"><h2 className="font-bold">No {mode === "projected" ? "projections" : "player statistics"} found</h2><p className="mt-2 text-slate-400">{season === 2026 && mode === "actual" ? "The 2026 regular season has not produced nflverse rows yet. This view will populate after the weekly import." : "Try another season, season type, scoring format, or position."}</p></Card>}
     </div>

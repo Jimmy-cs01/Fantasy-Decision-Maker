@@ -53,11 +53,12 @@ describe("Trade Finder route", () => {
     expect(page).toContain("getLeagueRosterAnalytics");
   });
 
-  it("uses the same active reconciled Player Value projection as the player explorer", () => {
+  it("keeps trade values on the active pool while Explorer uses canonical displayed PPG", () => {
     expect(leagueAnalytics).toContain("getLatestProjectionPool");
     expect(leagueAnalytics).toContain("projected_ppg: playerValue?.projectedPpg ?? null");
     expect(playerLeaders).toContain("const latest = await getLatestProjectionPool(db)");
-    expect(playerLeaders).toContain("projected_ppg: value.projectedPpg");
+    expect(playerLeaders).toContain("displayedProjectionPoints");
+    expect(playerLeaders).toContain("projected_ppg: projectedPpg");
     expect(page).toContain("projectedPpg: player.projected_ppg");
   });
 

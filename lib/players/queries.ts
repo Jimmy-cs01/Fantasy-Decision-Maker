@@ -10,6 +10,7 @@ import type { ValueLeagueConfig } from "@/lib/player-values/types";
 import { calculateHistoricalPositionFinishes } from "./position-finishes";
 import { resolveCanonicalPlayerId } from "./identifiers";
 import { publicDataError } from "./data-errors";
+import { displayedProjectionPoints } from "@/lib/projections/presentation";
 
 async function attachHeadshots(db: Awaited<ReturnType<typeof createClient>>, rows: PlayerSeasonRow[]) {
   if (!rows.length) return rows;
@@ -57,14 +58,20 @@ export async function getProjectedPlayerLeaders(options: {
     const record = records.get(value.playerId);
     const identity = record ? projectionIdentity(record) : null;
     if (!identity) return [];
+    const projectedPpg = displayedProjectionPoints({
+      stats: record!.projected_stats,
+      position: value.position,
+      mode: options.scoring,
+      leagueSettings: options.scoring === "league" ? options.scoringSettings : undefined,
+    });
     return [{
       player_id: value.playerId,
       full_name: value.fullName,
       position: value.position,
       team: identity.team,
       headshot_url: identity.headshot_url,
-      projected_ppg: value.projectedPpg,
-      projected_fpts: Math.round(value.projectedPpg * value.expectedGamesRemaining * 10) / 10,
+      projected_ppg: projectedPpg,
+      projected_fpts: Math.round(projectedPpg * value.expectedGamesRemaining * 10) / 10,
       player_value: value.value,
       overall_rank: value.overallRank,
       position_rank: value.positionRank,

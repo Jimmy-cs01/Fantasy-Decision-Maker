@@ -7,6 +7,11 @@ const migration = readFileSync(
 );
 
 describe("guest public football access migration", () => {
+  it("keeps player search public instead of adding an application auth gate", () => {
+    const route = readFileSync(new URL("../../app/api/players/search/route.ts", import.meta.url), "utf8");
+    expect(route).not.toContain("Authentication required");
+    expect(route).not.toContain("getUser()");
+  });
   it.each([
     "players",
     "player_weekly_nfl_statistics",

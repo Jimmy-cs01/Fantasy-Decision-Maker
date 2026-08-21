@@ -101,6 +101,7 @@ export function Sidebar({ guest = false, guestView }: { guest?: boolean; guestVi
 
 function guestHref(href: string, leagueId: string | null) {
   if (["/players", "/matchups", "/depth-charts"].includes(href)) return href;
+  if (!leagueId && ["/trades", "/start-sit"].includes(href)) return href;
   if (!leagueId) return "/guest";
   if (href === "/dashboard") return guestLeagueHref(leagueId);
   if (href === "/trades") return guestLeagueHref(leagueId, "trades");

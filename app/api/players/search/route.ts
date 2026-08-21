@@ -6,8 +6,7 @@ import { searchRank } from "@/lib/players/filters";
 export async function GET(request: Request) {
   const parsed = z.string().trim().min(2).max(80).safeParse(new URL(request.url).searchParams.get("q"));
   if (!parsed.success) return NextResponse.json({ players: [] });
-  const db = await createClient(); const { data: { user } } = await db.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  const db = await createClient();
   const escaped = parsed.data.replaceAll("%", "\\%").replaceAll("_", "\\_");
   const { data, error } = await db.from("players").select("id,full_name,historical_position,sleeper_position,team,rookie_season,sleeper_player_id").ilike("full_name", `%${escaped}%`).limit(30);
   if (error) { console.error("Player search failed", error); return NextResponse.json({ error: "Player search is unavailable." }, { status: 500 }); }

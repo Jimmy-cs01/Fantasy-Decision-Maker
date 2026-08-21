@@ -144,19 +144,26 @@ export async function getCurrentDepthRoles(
     },
     query: async (signal) => {
       const roles = new Map<string, CurrentDepthRole>();
-      for (let start = 0; start < playerIds.length; start += 500) {
+      const batches = [];
+      for (let start = 0; start < playerIds.length; start += 100) {
+        batches.push(playerIds.slice(start, start + 100));
+      }
+      const results = await Promise.all(batches.map(async (batch) => {
         const { data, error } = await db
           .from("player_depth_chart_roles")
           .select(
             "player_id,position,depth_position,depth_rank,is_starter,team,source_updated_at",
           )
-          .in("player_id", playerIds.slice(start, start + 500))
+          .in("player_id", batch)
           .eq("season", season)
           .order("source_updated_at", { ascending: false })
           .abortSignal(signal);
         if (error)
           throw new Error("Unable to load depth chart roles: " + error.message);
-        for (const row of data ?? []) {
+        return data ?? [];
+      }));
+      for (const rows of results) {
+        for (const row of rows) {
           if (roles.has(row.player_id)) continue;
           roles.set(row.player_id, {
             playerId: row.player_id,

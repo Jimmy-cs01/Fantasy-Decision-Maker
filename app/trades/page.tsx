@@ -3,6 +3,8 @@ import { TradeFinder, type TradeTeam } from "@/components/trades/trade-finder";
 import { Card } from "@/components/ui/card";
 import { getLeagueRosterAnalytics } from "@/lib/player-values/league-service";
 import { createClient } from "@/lib/supabase/server";
+import { StandaloneTradeFinder } from "@/components/trades/standalone-trade-finder";
+import { getStandaloneTradePlayerPool, STANDALONE_ROSTER_POSITIONS } from "@/lib/trades/manual-service";
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
@@ -17,6 +19,7 @@ export default async function TradesPage({
   const {
     data: { user },
   } = await db.auth.getUser();
+  if (!user) return <StandaloneTradesPage db={db} />;
   const { data: leagues, error: leaguesError } = await db
     .from("leagues")
     .select("*")
@@ -32,23 +35,7 @@ export default async function TradesPage({
     leagues?.[0] ??
     null;
   if (!league)
-    return (
-      <div className="mx-auto max-w-6xl">
-        <h1 className="text-3xl font-black">Trade Finder</h1>
-        <Card className="mt-5 text-center">
-          <h2 className="font-bold">Connect a league first</h2>
-          <p className="mt-2 text-slate-400">
-            Trade Finder only uses players from synchronized Sleeper rosters.
-          </p>
-          <Link
-            href="/dashboard/connect"
-            className="mt-4 inline-block font-bold text-cyan-300"
-          >
-            Connect Sleeper →
-          </Link>
-        </Card>
-      </div>
-    );
+    return <StandaloneTradesPage db={db} />;
   const [
     { data: teamRows, error: teamsError },
     { data: members, error: membersError },
@@ -164,4 +151,9 @@ export default async function TradesPage({
       </p>
     </div>
   );
+}
+
+async function StandaloneTradesPage({ db }: { db: Awaited<ReturnType<typeof createClient>> }) {
+  const players = await getStandaloneTradePlayerPool(db);
+  return <div className="mx-auto max-w-6xl"><header><p className="text-xs font-black tracking-[0.2em] text-cyan-300">STANDALONE ANALYTICS</p><h1 className="mt-1 text-3xl font-black">Trade Finder</h1><p className="mt-2 text-sm text-slate-400">Build both rosters manually and analyze trades without connecting a fantasy platform.</p></header><div className="mt-5">{players.length ? <StandaloneTradeFinder players={players} rosterPositions={STANDALONE_ROSTER_POSITIONS} /> : <Card className="text-center"><h2 className="font-bold">Projection data unavailable</h2><p className="mt-2 text-slate-400">The standalone player pool will appear when the active projection week is available.</p></Card>}</div></div>;
 }

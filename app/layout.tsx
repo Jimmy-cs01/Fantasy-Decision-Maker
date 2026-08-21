@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
+import { GuestAnalyticsTracker } from "@/components/analytics/guest-analytics-tracker";
 
 const title = "Jimmy GM";
 const description =
@@ -20,7 +21,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><GuestAnalyticsTracker />{children}</body>
     </html>
   );
 }
