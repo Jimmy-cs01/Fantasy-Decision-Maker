@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartNoAxesCombined, LogIn, LogOut, Menu, Save, X } from "lucide-react";
+import { LogIn, LogOut, Menu, Save, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { signOut } from "@/app/auth/actions";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { guestLeagueHref } from "@/lib/guest/session";
 import { useGuestSession } from "@/lib/guest/use-guest-session";
 import { isNavigationActive, NAVIGATION_ITEMS } from "./navigation-items";
@@ -60,7 +61,7 @@ export function Sidebar({ guest = false, guestView }: { guest?: boolean; guestVi
 
   return <>
     <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 py-3 md:hidden">
-      <Link href={guest ? guestDashboardHref : "/dashboard"} aria-label="Jimmy GM dashboard" className="flex items-center gap-2 font-black text-cyan-300"><ChartNoAxesCombined size={20} /><span className="text-slate-100">Jimmy GM</span></Link>
+      <Link href={guest ? guestDashboardHref : "/dashboard"} aria-label="Jimmy GM dashboard" className="font-black text-cyan-300"><BrandLogo size={24} wordmarkClassName="text-slate-100" /></Link>
       <button
         ref={menuButtonRef}
         type="button"
@@ -92,7 +93,7 @@ export function Sidebar({ guest = false, guestView }: { guest?: boolean; guestVi
     </div> : null}
 
     <aside className="hidden min-h-screen w-60 flex-col border-r border-slate-800 bg-slate-950/60 p-4 md:flex">
-      <Link href={guest ? guestDashboardHref : "/dashboard"} aria-label="Jimmy GM dashboard" className="flex items-center gap-2 font-black text-cyan-300"><ChartNoAxesCombined size={20} /><span className="text-slate-100">Jimmy GM</span></Link>
+      <Link href={guest ? guestDashboardHref : "/dashboard"} aria-label="Jimmy GM dashboard" className="font-black text-cyan-300"><BrandLogo size={24} wordmarkClassName="text-slate-100" /></Link>
       <NavigationLinks pathname={pathname} guest={guest} guestLeagueId={guestLeagueId} guestView={guestView} className="mt-10 flex flex-col gap-1" />
       {guest ? <GuestAccountPanel leagueName={selectedGuestLeague?.name} season={selectedGuestLeague?.season} username={guestSession?.sleeperUsername} switchHref="/guest" signupHref={guestSignupHref} className="mt-auto" /> : <form className="mt-auto"><button formAction={signOut} className="flex items-center gap-2 text-sm text-slate-400 hover:text-white"><LogOut size={16} /> Sign out</button></form>}
     </aside>

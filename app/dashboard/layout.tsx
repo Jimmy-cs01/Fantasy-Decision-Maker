@@ -1,7 +1,9 @@
 import { AppShell } from "@/components/dashboard/app-shell";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { privatePageMetadata } from "@/lib/seo/metadata";
 export const dynamic = "force-dynamic";
+export const metadata = privatePageMetadata("Dashboard");
 export default async function DashboardLayout({
   children,
 }: {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChartNoAxesCombined } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -70,7 +70,7 @@ export function GuestConnect() {
   return <main className="min-h-screen px-4 py-8 sm:px-6">
     <div className="mx-auto max-w-3xl">
       <Link href="/" className="inline-flex items-center gap-2 text-xs font-black tracking-[0.18em] text-cyan-300">
-        <ChartNoAxesCombined size={18} /> JIMMY GM
+        <BrandLogo size={22} label="JIMMY GM" />
       </Link>
       <header className="mt-7">
         <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs font-black text-amber-200">GUEST MODE</span>

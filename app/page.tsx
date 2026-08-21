@@ -1,20 +1,20 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  ChartNoAxesCombined,
   History,
   Scale,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { getProjectedPlayerLeaders } from "@/lib/players/queries";
 import { RosterInjurySummary } from "@/components/injuries/roster-injury-summary";
 
 const features = [
-  { icon: UsersRound, text: "Sync Sleeper leagues and compare every roster" },
-  { icon: History, text: "Explore player stats and historical performance" },
-  { icon: Scale, text: "See results through your league’s scoring settings" },
-  { icon: ShieldCheck, text: "Build toward trade and lineup decision tools" },
+  { icon: UsersRound, href: "/guest", text: "Sleeper fantasy football tools for league and roster analysis" },
+  { icon: History, href: "/players", text: "Fantasy football projections, player values, and historical stats" },
+  { icon: Scale, href: "/trades", text: "Fantasy football Trade Finder with roster-aware analysis" },
+  { icon: ShieldCheck, href: "/start-sit", text: "Start / Sit comparisons using weekly projections" },
 ];
 
 export const dynamic = "force-dynamic";
@@ -32,9 +32,7 @@ export default async function Home() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,rgba(34,211,238,0.16),transparent_30%)]" />
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-6 sm:px-8 lg:px-10">
         <header className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs font-black tracking-[0.18em] text-cyan-300 sm:text-sm">
-            <ChartNoAxesCombined aria-hidden="true" size={20} /> JIMMY GM
-          </div>
+          <BrandLogo size={24} label="JIMMY GM" className="text-xs font-black tracking-[0.18em] text-cyan-300 sm:text-sm" />
           <nav aria-label="Account options" className="flex items-center gap-3 text-sm font-bold">
             <Link href="/guest" className="text-cyan-300 transition hover:text-cyan-200">
               Continue as Guest
@@ -56,8 +54,8 @@ export default async function Home() {
               <span className="text-cyan-300">Clearer decisions.</span>
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-              Bring your Sleeper or Yahoo league, historical NFL performance, and custom
-              scoring into one focused workspace.
+              Explore fantasy football projections, player values, Trade Finder, Start / Sit,
+              and Sleeper or Yahoo league analysis in one focused workspace.
             </p>
             <div className="mt-7 grid gap-3 sm:flex">
               <Link
@@ -92,10 +90,11 @@ export default async function Home() {
               Built for your league
             </p>
             <div className="mt-3 grid gap-2.5">
-              {features.map(({ icon: Icon, text }) => (
-                <div
+              {features.map(({ icon: Icon, href, text }) => (
+                <Link
                   key={text}
-                  className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/55 p-3.5"
+                  href={href}
+                  className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/55 p-3.5 transition hover:border-cyan-400/40 hover:bg-slate-900"
                 >
                   <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300">
                     <Icon aria-hidden="true" size={18} />
@@ -103,7 +102,7 @@ export default async function Home() {
                   <p className="text-sm leading-5 font-semibold text-slate-200">
                     {text}
                   </p>
-                </div>
+                </Link>
               ))}
             </div>
             {notableInjuries.length ? <div className="mt-4"><RosterInjurySummary title="Notable injuries" players={notableInjuries.map((player) => ({ id: player.player_id, full_name: player.full_name, position: player.position, team: player.team, projected_ppg: player.projected_ppg, active_game_ppg: player.active_game_ppg, availability_adjustment: player.availability_adjustment, injury_status: player.injury_status, injury_status_label: player.injury_status_label, injury_timeline: player.injury_timeline, practice_participation: player.practice_participation, injury_data_stale: player.injury_data_stale, current_week_active_probability: player.current_week_active_probability }))} /></div> : null}

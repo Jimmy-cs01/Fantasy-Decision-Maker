@@ -1,5 +1,5 @@
 const DEVELOPMENT_SITE_URL = "http://localhost:3000";
-const PRODUCTION_SITE_URL = "https://jimmygm.com";
+export const CANONICAL_SITE_URL = "https://jimmygm.com";
 
 interface SiteEnvironment {
   NEXT_PUBLIC_SITE_URL?: string;
@@ -17,7 +17,7 @@ export function getSiteUrl(environment: SiteEnvironment = process.env) {
   const configured = environment.NEXT_PUBLIC_SITE_URL?.trim();
   if (configured) return normalizeSiteUrl(configured);
   return environment.NODE_ENV === "production"
-    ? PRODUCTION_SITE_URL
+    ? CANONICAL_SITE_URL
     : DEVELOPMENT_SITE_URL;
 }
 
