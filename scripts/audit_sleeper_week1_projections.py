@@ -217,13 +217,15 @@ def query_remote_v332() -> tuple[pd.DataFrame, dict[str, Any]]:
         "odds_games.season": "eq.2026", "odds_games.week": "eq.1", "limit": "1000",
     }, safe="!(),")
     props = rest.request("GET", f"player_props?{props_query}")
+    prop_player_ids = {str(row["player_id"]) for row in props}
+    projections["has_player_props"] = projections.player_id.astype(str).isin(prop_player_ids)
     teams = {row[key] for row in odds for key in ("home_team", "away_team") if row.get(key)}
     diagnostics = [row if isinstance(row, dict) else {} for row in projections.projection_diagnostics]
     freshness = pd.Series([row.get("vegasFreshness", "unavailable") for row in diagnostics]).value_counts().to_dict()
     return projections, {
         "version": "v3.3.2", "model_version_id": version_id, "rows": len(projections),
         "vegas_games": len({row["external_game_id"] for row in odds}), "vegas_teams": len(teams),
-        "players_with_props": len({row["player_id"] for row in props}),
+        "players_with_props": len(prop_player_ids),
         "vegas_freshness": {str(key): int(value) for key, value in freshness.items()},
         "query_failures": 0,
     }
@@ -426,6 +428,7 @@ def main() -> None:
         live_row = live_by_sleeper.get(sleeper_id)
         live_final = float(live_row.final_projection_ppr) if live_row is not None and pd.notna(live_row.final_projection_ppr) else float(local_row.model_projection_ppr)
         live_vegas = float(live_row.vegas_projection_ppr) if live_row is not None and pd.notna(live_row.vegas_projection_ppr) else None
+        has_player_props = bool(live_row.has_player_props) if live_row is not None and "has_player_props" in live_row else False
         long_rate = rate_map.get(str(local_row.gsis_id), position_priors.get(str(supplied.position), {}))
         long_events = expected_long_events(stats, long_rate)
         enriched = {**stats, **long_events}
@@ -443,6 +446,7 @@ def main() -> None:
             "sleeper_projection": float(supplied.sleeper_projection), "jimmy_base_ppr": live_final,
             "sleeper_api_custom_projection": sleeper_custom_current,
             "jimmy_raw_model_ppr": float(local_row.model_projection_ppr), "jimmy_vegas_ppr": live_vegas,
+            "has_player_props": has_player_props,
             "scoring_adjustment": adjustment, "rush_attempt_bonus": float(stats.get("rush_attempts", 0) or 0) * settings.get("rush_att", 0),
             "rare_bonus_ev": custom_with_rare - custom_without_rare,
             "other_linear_adjustment": custom_without_rare - component_ppr,
@@ -453,8 +457,15 @@ def main() -> None:
             "targets": float(stats.get("targets", 0) or 0), "passing_touchdowns": float(stats.get("passing_touchdowns", 0) or 0),
             "rushing_touchdowns": float(stats.get("rushing_touchdowns", 0) or 0), "receiving_touchdowns": float(stats.get("receiving_touchdowns", 0) or 0),
             "sleeper_pass_attempts": float(api_stats.get("pass_att", 0) or 0),
+            "sleeper_pass_yards": float(api_stats.get("pass_yd", 0) or 0),
+            "sleeper_pass_touchdowns": float(api_stats.get("pass_td", 0) or 0),
             "sleeper_rush_attempts": float(api_stats.get("rush_att", 0) or 0),
+            "sleeper_rush_yards": float(api_stats.get("rush_yd", 0) or 0),
+            "sleeper_rush_touchdowns": float(api_stats.get("rush_td", 0) or 0),
             "sleeper_targets": float(api_stats.get("rec_tgt", 0) or 0),
+            "sleeper_receptions": float(api_stats.get("rec", 0) or 0),
+            "sleeper_receiving_yards": float(api_stats.get("rec_yd", 0) or 0),
+            "sleeper_receiving_touchdowns": float(api_stats.get("rec_td", 0) or 0),
             "depth_role": (
                 f"{local_row.depth_position}{int(local_row.depth_rank)}"
                 if pd.notna(local_row.depth_position) and pd.notna(local_row.depth_rank)

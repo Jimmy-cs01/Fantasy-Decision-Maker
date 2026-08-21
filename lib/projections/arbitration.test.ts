@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arbitrateProjection, calculateVegasProjection } from "./arbitration";
+import { arbitrateProjection, calculateV41ConsensusRescue, calculateVegasProjection } from "./arbitration";
 
 const rbStats = {
   rush_attempts: 10,
@@ -137,5 +137,46 @@ describe("projection arbitration", () => {
     });
     expect(result.opportunityConfidence).toBeLessThan(0.5);
     expect(result.finalPpr).toBeLessThan(8);
+  });
+
+  it("rescues an established dual-threat QB through coherent components", () => {
+    const result = arbitrateProjection({
+      arbitrationVersion: "v4.1",
+      position: "QB",
+      rawStats: {
+        pass_attempts: 24, completions: 16, passing_yards: 190, passing_touchdowns: 1.1,
+        interceptions_thrown: 0.5, rush_attempts: 4, rushing_yards: 20, rushing_touchdowns: 0.15,
+      },
+      modelPpr: 14,
+      currentTeam: "BAL",
+      depth: { depthRank: 1, isStarter: true },
+      historicalGames: 80,
+      historicalBaseline: {
+        games: 80, seasons: 4, fantasyPpg: 22, passAttempts: 29,
+        rushAttempts: 8, rushingYards: 52, rushingTouchdowns: 0.3,
+      },
+      sleeperPpr: 21.5,
+      sleeperStats: {
+        passAttempts: 28, passingYards: 220, passingTouchdowns: 1.6,
+        rushAttempts: 7.5, rushingYards: 40, rushingTouchdowns: 0.25,
+      },
+      now,
+    });
+    expect(result.stats.rush_attempts).toBeGreaterThan(6);
+    expect(result.stats.rushing_yards).toBeGreaterThan(35);
+    expect(result.finalPpr).toBeGreaterThan(18);
+    expect(result.diagnostics.consensusRescueScore).toBeGreaterThan(0);
+  });
+
+  it("uses stronger rescue only as disagreement and corroboration increase", () => {
+    const close = calculateV41ConsensusRescue({
+      jimmyPpr: 18, sleeperPpr: 19, roleConfidence: 1, modelConfidence: "high",
+    });
+    const extreme = calculateV41ConsensusRescue({
+      jimmyPpr: 12, sleeperPpr: 21, vegasPpr: 20, vegasConfidence: .8,
+      historicalPpr: 22, historicalGames: 60, roleConfidence: 1, modelConfidence: "low",
+    });
+    expect(extreme.weight).toBeGreaterThan(close.weight);
+    expect(extreme.corroboratingSignals).toBe(2);
   });
 });

@@ -1,5 +1,10 @@
 import { calculateProjectedFantasyPoints } from "./scoring";
 import type { ProjectedStatLine, ProjectionConfidence } from "./types";
+import {
+  applyV4ComponentConsensus,
+  type V4HistoricalBaseline,
+  type V4SleeperComponents,
+} from "./v4-consensus";
 
 export type ProjectionOutlier = "normal" | "watch" | "large" | "extreme";
 
@@ -39,10 +44,13 @@ export interface ProjectionArbitrationInput {
   historicalGames?: number;
   recentOpportunityShare?: number | null;
   sleeperPpr?: number | null;
+  sleeperStats?: V4SleeperComponents | null;
+  historicalBaseline?: V4HistoricalBaseline | null;
   vegasProps?: VegasPropEvidence[];
   vegasGame?: VegasGameEvidence | null;
   scoringSettings?: Record<string, number>;
   modelConfidence?: ProjectionConfidence;
+  arbitrationVersion?: "v3" | "v4" | "v4.1";
   now?: Date;
 }
 
@@ -63,6 +71,10 @@ export interface ProjectionDiagnostics {
   outlierStatus: ProjectionOutlier;
   vegasConfidence: number;
   vegasFreshness: "current" | "aging" | "stale" | "unavailable";
+  consensusRescueScore?: number;
+  consensusSignals?: number;
+  sleeperComponentsUsed?: number;
+  componentSleeperWeight?: number;
 }
 
 export interface ProjectionArbitrationResult {
@@ -87,6 +99,70 @@ const finite = (value: unknown) => {
   return Number.isFinite(number) ? number : 0;
 };
 
+export interface V41ConsensusRescue {
+  weight: number;
+  score: number;
+  corroboratingSignals: number;
+}
+
+/** Current-slate arbitration only; it is never used as a historical target. */
+export function calculateV41ConsensusRescue(input: {
+  jimmyPpr: number;
+  sleeperPpr: number;
+  vegasPpr?: number | null;
+  vegasConfidence?: number;
+  historicalPpr?: number | null;
+  historicalGames?: number;
+  roleConfidence: number;
+  modelConfidence?: ProjectionConfidence;
+  sleeperComponentsUsed?: number;
+}) : V41ConsensusRescue {
+  const jimmy = Math.max(0, finite(input.jimmyPpr));
+  const sleeper = Math.max(0, finite(input.sleeperPpr));
+  const disagreement = Math.abs(sleeper - jimmy);
+  const direction = Math.sign(sleeper - jimmy);
+  const severity = clamp((disagreement - 0.75) / 5.25);
+  const componentsUsed = (input.sleeperComponentsUsed ?? 0) > 0;
+  const minimum = componentsUsed ? 0.04 : 0.08;
+  const maximum = 0.72;
+  let weight = minimum + (maximum - minimum) * Math.pow(severity, 1.1);
+  let score = severity;
+  let corroboratingSignals = 0;
+
+  const vegas = input.vegasPpr;
+  if (
+    vegas != null
+    && direction !== 0
+    && Math.sign(vegas - jimmy) === direction
+    && Math.abs(vegas - jimmy) >= 1.5
+  ) {
+    const quality = clamp(input.vegasConfidence ?? 0);
+    weight += 0.15 * quality;
+    score += 0.2 * quality;
+    corroboratingSignals += 1;
+  }
+  const history = input.historicalPpr;
+  if (
+    history != null
+    && (input.historicalGames ?? 0) >= 17
+    && direction !== 0
+    && Math.sign(history - jimmy) === direction
+    && Math.abs(history - jimmy) >= 1.5
+  ) {
+    weight += input.roleConfidence >= 0.8 ? 0.18 : 0.08;
+    score += 0.16;
+    corroboratingSignals += 1;
+  }
+  if (corroboratingSignals >= 2) weight += 0.12;
+  if (input.modelConfidence === "high" && corroboratingSignals === 0) weight -= 0.06;
+  if (input.roleConfidence < 0.5 && corroboratingSignals === 0) weight -= 0.08;
+  return {
+    weight: clamp(weight, 0.03, maximum),
+    score: clamp(score),
+    corroboratingSignals,
+  };
+}
+
 const VOLUME_STATS = new Set<keyof ProjectedStatLine>([
   "pass_attempts", "completions", "passing_yards", "passing_touchdowns",
   "interceptions_thrown", "passing_first_downs", "rush_attempts",
@@ -100,6 +176,13 @@ const EXPECTED_PROP_MARKETS: Record<string, string[]> = {
   RB: ["player_rush_yds", "player_receptions", "player_reception_yds", "player_anytime_td"],
   WR: ["player_receptions", "player_reception_yds", "player_anytime_td"],
   TE: ["player_receptions", "player_reception_yds", "player_anytime_td"],
+};
+
+const V4_ADDITIONAL_PROP_MARKETS: Record<string, string[]> = {
+  QB: ["player_pass_attempts", "player_pass_completions", "player_rush_attempts", "player_rush_tds", "player_anytime_td"],
+  RB: ["player_rush_attempts", "player_rush_tds", "player_reception_tds"],
+  WR: ["player_reception_tds"],
+  TE: ["player_reception_tds"],
 };
 
 const POSITION_MARKET_BASELINE: Record<string, number> = { QB: 17, RB: 9, WR: 9, TE: 7 };
@@ -173,7 +256,10 @@ export function calculateVegasProjection(
   input: ProjectionArbitrationInput,
 ): { ppr: number | null; confidence: number; weight: number; freshness: ProjectionDiagnostics["vegasFreshness"] } {
   const settings = input.scoringSettings ?? { rec: 1 };
-  const expected = EXPECTED_PROP_MARKETS[input.position.toUpperCase()] ?? [];
+  const position = input.position.toUpperCase();
+  const expected = input.arbitrationVersion?.startsWith("v4")
+    ? [...(EXPECTED_PROP_MARKETS[position] ?? []), ...(V4_ADDITIONAL_PROP_MARKETS[position] ?? [])]
+    : EXPECTED_PROP_MARKETS[position] ?? [];
   const props = (input.vegasProps ?? []).filter((prop) => expected.includes(prop.market));
   const now = input.now ?? new Date();
   const newest = props.map((prop) => prop.capturedAt).sort().at(-1) ?? input.vegasGame?.capturedAt;
@@ -197,8 +283,10 @@ export function calculateVegasProjection(
   direct += finite(lineByMarket.get("player_pass_attempts")?.line) * finite(settings.pass_att);
   direct += finite(lineByMarket.get("player_pass_completions")?.line) * finite(settings.pass_cmp);
   direct += finite(lineByMarket.get("player_rush_yds")?.line) * finite(settings.rush_yd ?? 0.1);
+  direct += finite(lineByMarket.get("player_rush_tds")?.line) * finite(settings.rush_td ?? 6);
   direct += finite(lineByMarket.get("player_receptions")?.line) * finite(settings.rec ?? 1);
   direct += finite(lineByMarket.get("player_reception_yds")?.line) * finite(settings.rec_yd ?? 0.1);
+  direct += finite(lineByMarket.get("player_reception_tds")?.line) * finite(settings.rec_td ?? 6);
   const td = lineByMarket.get("player_anytime_td");
   if (td) {
     const position = input.position.toUpperCase();
@@ -286,7 +374,20 @@ function reconcileScoringComponents(
 export function arbitrateProjection(input: ProjectionArbitrationInput): ProjectionArbitrationResult {
   const settings = input.scoringSettings ?? { rec: 1 };
   const role = opportunityConfidence(input);
-  const opportunityStats = opportunityAdjustedStats(input.rawStats, role);
+  let opportunityStats = opportunityAdjustedStats(input.rawStats, role);
+  const v4 = input.arbitrationVersion?.startsWith("v4")
+    ? applyV4ComponentConsensus({
+      stats: opportunityStats,
+      position: input.position,
+      historical: input.historicalBaseline,
+      sleeper: input.sleeperStats,
+      props: input.vegasProps,
+      kickoff: input.vegasGame?.kickoff,
+      now: input.now,
+      release: input.arbitrationVersion === "v4.1" ? "v4.1" : "v4",
+    })
+    : null;
+  if (v4) opportunityStats = v4.stats;
   const opportunityPpr = calculateProjectedFantasyPoints(opportunityStats, settings, input.position);
   const vegas = calculateVegasProjection(input);
   const sleeper = input.sleeperPpr ?? null;
@@ -295,13 +396,40 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
   const adjustedOutlier = classifyOutlier(opportunityPpr, vegas.ppr, vegas.confidence, sleeper);
   const roleOutlier = classifyOutlier(input.modelPpr, opportunityPpr, 1 - role, null);
   const outlier = [rawOutlier, adjustedOutlier, roleOutlier].sort((left, right) => severity[right] - severity[left])[0];
-  const modelWeight = 1 - vegas.weight;
-  let final = opportunityPpr * modelWeight + (vegas.ppr ?? 0) * vegas.weight;
+  // v4 props already moved their matching statistical components. Only the
+  // remaining independent market fraction may influence final PPG.
+  const vegasWeight = v4
+    ? vegas.weight * (1 - v4.componentMarketWeight)
+    : vegas.weight;
+  const modelWeight = 1 - vegasWeight;
+  let final = opportunityPpr * modelWeight + (vegas.ppr ?? 0) * vegasWeight;
   let sleeperWeight = 0;
+  let consensusRescueScore = 0;
+  let consensusSignals = 0;
 
   if (sleeper != null) {
-    const roleUncertainty = 1 - role;
-    sleeperWeight = clamp(0.08 + roleUncertainty * 0.17, 0.08, 0.25);
+    const hasSleeperComponents = Boolean(input.sleeperStats && Object.values(input.sleeperStats).some((value) => value != null));
+    if (input.arbitrationVersion === "v4.1") {
+      const rescue = calculateV41ConsensusRescue({
+        jimmyPpr: final,
+        sleeperPpr: sleeper,
+        vegasPpr: vegas.ppr,
+        vegasConfidence: vegas.confidence,
+        historicalPpr: input.historicalBaseline?.fantasyPpg,
+        historicalGames: input.historicalBaseline?.games,
+        roleConfidence: role,
+        modelConfidence: input.modelConfidence,
+        sleeperComponentsUsed: v4?.sleeperComponentsUsed,
+      });
+      sleeperWeight = rescue.weight;
+      consensusRescueScore = rescue.score;
+      consensusSignals = rescue.corroboratingSignals;
+    } else {
+      const roleUncertainty = 1 - role;
+      sleeperWeight = input.arbitrationVersion === "v4" && hasSleeperComponents
+        ? clamp(0.03 + roleUncertainty * 0.07, 0.03, 0.1)
+        : clamp(0.08 + roleUncertainty * 0.17, 0.08, 0.25);
+    }
     final = final * (1 - sleeperWeight) + sleeper * sleeperWeight;
   }
   if (!input.currentTeam) final = Math.min(final, 0.75);
@@ -328,6 +456,10 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
   else if (input.vegasGame?.teamImpliedTotal != null) drivers.push(`Team implied total provides limited market context`);
   if (vegas.freshness === "stale") drivers.push("Stale market data receives little or no projection weight");
   if (outlier !== "normal") drivers.push(`${outlier[0].toUpperCase()}${outlier.slice(1)} disagreement across independent projection evidence`);
+  if (v4) drivers.push(...v4.reasons);
+  if (input.arbitrationVersion === "v4.1" && consensusRescueScore >= 0.5) {
+    drivers.push("Independent consensus strongly corrected an extreme model disagreement");
+  }
   if (!drivers.length) drivers.push("Model, role, and available external evidence are broadly consistent");
   const diagnostics: ProjectionDiagnostics = {
     rawModelPpr: input.modelPpr,
@@ -336,7 +468,7 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
     sleeperPpr: sleeper,
     sleeperWeight,
     modelWeight,
-    vegasWeight: vegas.weight,
+    vegasWeight,
     opportunityConfidence: role,
     roleAdjustment: opportunityPpr - input.modelPpr,
     sanityAdjustment: finalPpr - input.modelPpr,
@@ -346,6 +478,10 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
     outlierStatus: outlier,
     vegasConfidence: vegas.confidence,
     vegasFreshness: vegas.freshness,
+    consensusRescueScore,
+    consensusSignals,
+    sleeperComponentsUsed: v4?.sleeperComponentsUsed ?? 0,
+    componentSleeperWeight: v4?.componentSleeperWeight ?? 0,
   };
   return {
     stats: reconciled,

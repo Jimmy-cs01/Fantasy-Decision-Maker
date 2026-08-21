@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTIVE_MODEL_RELATION_FILTER,
   DEFAULT_ACTIVE_PROJECTION_MODEL_VERSION,
   resolveActiveProjectionModelVersion,
   selectActiveProjection,
@@ -21,5 +22,9 @@ describe("active projection model selection", () => {
   it("allows an explicit, reversible version switch", () => {
     expect(resolveActiveProjectionModelVersion("v3.3")).toBe("v3.3");
     expect(() => resolveActiveProjectionModelVersion("latest")).toThrow(/must be a version/);
+  });
+
+  it("uses the database registry relation for production queries", () => {
+    expect(ACTIVE_MODEL_RELATION_FILTER).toBe("model_versions.is_active");
   });
 });

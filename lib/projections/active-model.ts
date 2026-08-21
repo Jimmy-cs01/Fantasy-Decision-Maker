@@ -1,6 +1,7 @@
 const MODEL_VERSION_PATTERN = /^v\d+(?:[._]\d+)*$/;
 
 export const DEFAULT_ACTIVE_PROJECTION_MODEL_VERSION = "v2";
+export const ACTIVE_MODEL_RELATION_FILTER = "model_versions.is_active";
 
 export function resolveActiveProjectionModelVersion(
   configured = process.env.ACTIVE_PROJECTION_MODEL_VERSION,

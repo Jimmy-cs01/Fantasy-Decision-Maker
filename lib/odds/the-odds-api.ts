@@ -13,8 +13,11 @@ export const PLAYER_PROP_MARKETS = [
   "player_pass_completions",
   "player_pass_interceptions",
   "player_rush_yds",
+  "player_rush_attempts",
+  "player_rush_tds",
   "player_receptions",
   "player_reception_yds",
+  "player_reception_tds",
   "player_anytime_td",
 ] as const;
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeProjection } from "./normalize";
-import { resolveActiveProjectionModelVersion } from "./active-model";
+import { ACTIVE_MODEL_RELATION_FILTER } from "./active-model";
 import type { ProjectionRecord, ProjectionScoringMode } from "./types";
 import { getInjuriesByPlayerIds } from "../injuries/service";
 import { calculateAvailability } from "../injuries/availability";
@@ -9,7 +9,7 @@ import { expectedGamesRemaining } from "../player-values/formula";
 import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
 import { normalizeNflTeam } from "../nfl/teams";
 
-const projectionSelect = "player_id,season,week,season_type,team,opponent_team,projected_stats,model_projection_ppr,opportunity_adjusted_ppr,vegas_projection_ppr,sleeper_projection_ppr,final_projection_ppr,blend_weight_model,vegas_confidence,opportunity_confidence,sanity_adjustment,outlier_classification,projection_diagnostics,projected_points_standard,projected_points_half_ppr,projected_points_ppr,residual_low,residual_high,confidence,drivers,generated_at,model_versions!inner(version)";
+const projectionSelect = "player_id,season,week,season_type,team,opponent_team,projected_stats,model_projection_ppr,opportunity_adjusted_ppr,vegas_projection_ppr,sleeper_projection_ppr,final_projection_ppr,blend_weight_model,vegas_confidence,opportunity_confidence,sanity_adjustment,outlier_classification,projection_diagnostics,projected_points_standard,projected_points_half_ppr,projected_points_ppr,residual_low,residual_high,confidence,drivers,generated_at,model_versions!inner(version,is_active)";
 
 export async function getPlayerProjection(
   playerId: string,
@@ -35,7 +35,7 @@ export async function getPlayerProjection(
     .select(projectionSelect)
     .eq("player_id", playerId)
     .eq("season_type", "REG")
-    .eq("model_versions.version", resolveActiveProjectionModelVersion());
+    .eq(ACTIVE_MODEL_RELATION_FILTER, true);
   if (options.season) query = query.eq("season", options.season);
   if (options.week) query = query.eq("week", options.week);
   const { data, error } = await query
@@ -87,7 +87,7 @@ export async function getPlayerProjectionSeries(
     db.from("players").select("historical_position,sleeper_position").eq("id", playerId).maybeSingle(),
     db.from("player_projections").select(projectionSelect).eq("player_id", playerId)
       .eq("season", options.season).eq("season_type", "REG")
-      .eq("model_versions.version", resolveActiveProjectionModelVersion())
+      .eq(ACTIVE_MODEL_RELATION_FILTER, true)
       .order("week", { ascending: true }).order("generated_at", { ascending: false }),
     db.from("nfl_games").select("week,kickoff,home_team,away_team").eq("season", options.season)
       .eq("season_type", "REG").order("week", { ascending: true }),
