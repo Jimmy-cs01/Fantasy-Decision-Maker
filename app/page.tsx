@@ -7,6 +7,8 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
+import { getProjectedPlayerLeaders } from "@/lib/players/queries";
+import { RosterInjurySummary } from "@/components/injuries/roster-injury-summary";
 
 const features = [
   { icon: UsersRound, text: "Sync Sleeper leagues and compare every roster" },
@@ -15,7 +17,16 @@ const features = [
   { icon: ShieldCheck, text: "Build toward trade and lineup decision tools" },
 ];
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  let notableInjuries: Awaited<ReturnType<typeof getProjectedPlayerLeaders>>["rows"] = [];
+  try {
+    const result = await getProjectedPlayerLeaders({ position: "ALL", scoring: "ppr", sort: "player_value", page: 1 });
+    notableInjuries = result.rows.filter((player) => !["healthy", "unknown"].includes(player.injury_status)).slice(0, 5);
+  } catch (error) {
+    console.warn("Notable injuries are temporarily unavailable", error);
+  }
   return (
     <main className="relative min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,rgba(34,211,238,0.16),transparent_30%)]" />
@@ -95,6 +106,7 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            {notableInjuries.length ? <div className="mt-4"><RosterInjurySummary title="Notable injuries" players={notableInjuries.map((player) => ({ id: player.player_id, full_name: player.full_name, position: player.position, team: player.team, projected_ppg: player.projected_ppg, active_game_ppg: player.active_game_ppg, availability_adjustment: player.availability_adjustment, injury_status: player.injury_status, injury_status_label: player.injury_status_label, injury_timeline: player.injury_timeline, practice_participation: player.practice_participation, injury_data_stale: player.injury_data_stale, current_week_active_probability: player.current_week_active_probability }))} /></div> : null}
           </section>
         </div>
       </div>

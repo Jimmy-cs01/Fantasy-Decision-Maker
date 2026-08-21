@@ -10,6 +10,8 @@ import type {
 import { VALUE_POSITIONS } from "./replacement";
 import type { FantasyPosition, ValuePlayerProjection } from "./types";
 import type { HistoricalValueContext } from "./types";
+import { availabilityAdjustedPpg, availabilityAdjustedQuantile, calculateAvailability } from "../injuries/availability";
+import type { InjuryRecord } from "../injuries/types";
 
 export interface CurrentDepthRole {
   playerId: string;
@@ -205,6 +207,9 @@ export function scoreProjectionPool(
   priors: Map<string, ProjectionPrior> = new Map(),
   depthRoles: Map<string, CurrentDepthRole> = new Map(),
   historicalContexts: Map<string, HistoricalValueContext> = new Map(),
+  injuries: Map<string, InjuryRecord> = new Map(),
+  gamesRemaining = 17,
+  kickoffByTeam: Map<string, string | null> = new Map(),
 ) {
   return records.flatMap((record): ValuePlayerProjection[] => {
     const player = projectionIdentity(record);
@@ -225,18 +230,22 @@ export function scoreProjectionPool(
     const stabilized = stabilizeProjection(modelPpg, prior);
     const shift = stabilized.ppg - modelPpg;
     const depth = depthRoles.get(record.player_id);
+    const availability = calculateAvailability(injuries.get(record.player_id), gamesRemaining, new Date(), player.team ? kickoffByTeam.get(player.team) : null);
+    const activeFloor = Math.max(0, modelPpg + Number(record.residual_low) + shift);
+    const activeCeiling = Math.max(0, modelPpg + Number(record.residual_high) + shift);
     return [
       {
         playerId: record.player_id,
         season: record.season,
         fullName: player.full_name,
         position,
-        projectedPpg: stabilized.ppg,
-        floorPpg: Math.max(0, modelPpg + Number(record.residual_low) + shift),
-        ceilingPpg: Math.max(
-          0,
-          modelPpg + Number(record.residual_high) + shift,
-        ),
+        projectedPpg: availabilityAdjustedPpg(stabilized.ppg, availability),
+        activeGamePpg: stabilized.ppg,
+        floorPpg: availabilityAdjustedQuantile(0.2, availability, activeFloor, stabilized.ppg, activeCeiling),
+        ceilingPpg: availabilityAdjustedQuantile(0.8, availability, activeFloor, stabilized.ppg, activeCeiling),
+        activeFloorPpg: activeFloor,
+        activeCeilingPpg: activeCeiling,
+        availability,
         confidence: record.confidence,
         projectedStats: record.projected_stats,
         priorSeasonPpg: stabilized.priorSeasonPpg,

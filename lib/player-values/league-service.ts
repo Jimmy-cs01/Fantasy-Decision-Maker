@@ -16,6 +16,10 @@ import { calculateLeagueSeasonPoints } from "../fantasy/league-scoring";
 import type { CombinedPlayerValue, ValueLeagueConfig } from "./types";
 import { analyticsErrorDetails, optionalQuery } from "./optional-query";
 import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
+import { getInjuriesByPlayerIds } from "../injuries/service";
+import { activeGameProjectionPoints, displayedProjectionPoints } from "../projections/presentation";
+import { calculateAvailability, availabilityAdjustedQuantile } from "../injuries/availability";
+import { expectedGamesRemaining } from "./formula";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -42,6 +46,15 @@ export interface LeagueAnalyticsPlayer {
   opponent: string | null;
   is_home: boolean | null;
   team_implied_total: number | null;
+  active_game_ppg: number | null;
+  healthy_player_value: number | null;
+  availability_adjustment: number | null;
+  injury_status: string | null;
+  injury_status_label: string | null;
+  injury_timeline: string | null;
+  practice_participation: string | null;
+  injury_data_stale: boolean;
+  current_week_active_probability: number;
 }
 
 export interface TeamProjectionSummary {
@@ -92,6 +105,7 @@ export interface LeagueAnalyticsDependencies {
   getProjectionHistoryRows: typeof getProjectionHistoryRows;
   getCurrentDepthRoles: typeof getCurrentDepthRoles;
   getWeeklyMatchups?: typeof getWeeklyMatchups;
+  getInjuriesByPlayerIds?: typeof getInjuriesByPlayerIds;
 }
 
 const DEFAULT_DEPENDENCIES: LeagueAnalyticsDependencies = {
@@ -99,6 +113,7 @@ const DEFAULT_DEPENDENCIES: LeagueAnalyticsDependencies = {
   getProjectionHistoryRows,
   getCurrentDepthRoles,
   getWeeklyMatchups,
+  getInjuriesByPlayerIds,
 };
 
 export async function getLeagueRosterAnalytics(
@@ -208,7 +223,7 @@ async function hydrateLeagueRosterAnalytics(
     ),
   ];
   const playerIds = latest ? rosteredPlayerIds : [];
-  const [history, depthRoles, matchups] = latest
+  const [history, depthRoles, matchups, injuries] = latest
     ? await Promise.all([
         optionalQuery({
           label: "League projection history lookup failed",
@@ -240,9 +255,19 @@ async function hydrateLeagueRosterAnalytics(
           metadata: { source: "Supabase/nfl_games+odds_games_consensus", leagueId: league.id, season: latest.season, week: latest.week },
           query: async () => (dependencies.getWeeklyMatchups ?? getWeeklyMatchups)(db, latest.season, latest.week),
         }),
+        dependencies.getInjuriesByPlayerIds
+          ? optionalQuery({
+              label: "League injury lookup failed",
+              fallback: new Map(),
+              metadata: { source: "Supabase/player_injuries", leagueId: league.id },
+              query: async () => dependencies.getInjuriesByPlayerIds!(db, playerIds),
+            })
+          : Promise.resolve(new Map()),
       ])
-    : [[], new Map(), []];
+    : [[], new Map(), [], new Map()];
   const matchupByTeam = matchupContextByTeam(matchups);
+  const kickoffByTeam = new Map([...matchupByTeam].map(([team, matchup]) => [team, matchup.kickoff]));
+  const projectionByPlayerId = new Map((latest?.records ?? []).map((record) => [record.player_id, record]));
   let valueContexts = null;
   if (latest) {
     try {
@@ -252,6 +277,8 @@ async function hydrateLeagueRosterAnalytics(
         leagueConfig,
         history,
         depthRoles,
+        injuries,
+        kickoffByTeam,
       );
     } catch (error) {
       console.warn(
@@ -308,6 +335,12 @@ async function hydrateLeagueRosterAnalytics(
         const playerValue = values.get(identity.id)?.league;
         const scoredProjection = valueContexts?.leagueProjections.get(identity.id)
           ?? valueContexts?.generalProjections.get(identity.id);
+        const projectionRecord = projectionByPlayerId.get(identity.id);
+        const availability = latest ? calculateAvailability(injuries.get(identity.id), expectedGamesRemaining(latest.week), new Date(), identity.team ? kickoffByTeam.get(identity.team) : null) : null;
+        const activeDisplayPpg = projectionRecord ? activeGameProjectionPoints({ stats: projectionRecord.projected_stats, position: identity.position, mode: "league", leagueSettings: scoringSettings }) : null;
+        const displayPpg = projectionRecord ? displayedProjectionPoints({ stats: projectionRecord.projected_stats, position: identity.position, mode: "league", leagueSettings: scoringSettings, availability }) : null;
+        const activeFloor = activeDisplayPpg != null && projectionRecord ? Math.max(0, activeDisplayPpg + Number(projectionRecord.residual_low)) : null;
+        const activeCeiling = activeDisplayPpg != null && projectionRecord ? Math.max(0, activeDisplayPpg + Number(projectionRecord.residual_high)) : null;
         const matchup = identity.team ? matchupByTeam.get(identity.team) : null;
         return [
           {
@@ -319,9 +352,9 @@ async function hydrateLeagueRosterAnalytics(
             roster_slot_index: useFallback
               ? (fallback?.rosterSlotIndex ?? entry.roster_slot_index)
               : entry.roster_slot_index,
-            projected_ppg: playerValue?.projectedPpg ?? null,
-            projection_floor: scoredProjection?.floorPpg ?? null,
-            projection_ceiling: scoredProjection?.ceilingPpg ?? null,
+            projected_ppg: displayPpg,
+            projection_floor: activeFloor != null && activeDisplayPpg != null ? availabilityAdjustedQuantile(0.2, availability, activeFloor, activeDisplayPpg, activeCeiling!) : scoredProjection?.floorPpg ?? null,
+            projection_ceiling: activeCeiling != null && activeDisplayPpg != null ? availabilityAdjustedQuantile(0.8, availability, activeFloor!, activeDisplayPpg, activeCeiling) : scoredProjection?.ceilingPpg ?? null,
             last_season_ppg: lastSeasonPpgByPlayerId.get(identity.id) ?? null,
             player_value: playerValue?.value ?? null,
             position_rank: playerValue?.positionRank ?? null,
@@ -332,6 +365,15 @@ async function hydrateLeagueRosterAnalytics(
             opponent: matchup?.opponent ?? null,
             is_home: matchup?.isHome ?? null,
             team_implied_total: matchup?.teamImpliedTotal ?? null,
+            active_game_ppg: activeDisplayPpg,
+            healthy_player_value: playerValue?.healthyValue ?? null,
+            availability_adjustment: playerValue?.availabilityAdjustment ?? null,
+            injury_status: playerValue?.injuryStatus ?? null,
+            injury_status_label: playerValue?.injuryStatusLabel ?? null,
+            injury_timeline: playerValue?.injuryTimeline ?? null,
+            practice_participation: playerValue?.practiceParticipation ?? null,
+            injury_data_stale: playerValue?.injuryDataStale ?? false,
+            current_week_active_probability: playerValue?.currentWeekActiveProbability ?? 1,
           },
         ];
       },

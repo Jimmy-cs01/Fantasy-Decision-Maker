@@ -18,6 +18,7 @@
     "data:odds:sync": "vite-node scripts/sync_the_odds_api.ts",
     "data:depth-charts": "python3 scripts/download_nflverse_depth_charts.py",
     "data:depth-charts:import:dry-run": "python3 scripts/import_depth_charts.py --dry-run",
+    "data:injuries": "vite-node scripts/sync_sleeper_injuries.ts",
     "data:players": "python3 scripts/download_nflverse_players.py",
     "data:players:import:dry-run": "python3 scripts/import_player_draft_capital.py --dry-run",
     "data:import:dry-run": "python3 scripts/import_historical_data.py --dry-run",

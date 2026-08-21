@@ -52,4 +52,12 @@ describe("league roster presentation", () => {
     );
     expect(html).toContain('href="/players/sleeper%3A4046?scoring=ppr"');
   });
+
+  it("surfaces actionable injury status without occupying healthy rows", () => {
+    const injured = { ...base, id: "injured", full_name: "Questionable Player", is_starter: true, roster_slot: "RB", injury_status: "questionable", injury_status_label: "Questionable", injury_data_stale: false } as LeagueRosterPlayer;
+    const healthy = { ...base, id: "healthy", full_name: "Healthy Player", is_starter: false, roster_slot: "BN", injury_status: "healthy", injury_status_label: "Healthy" } as LeagueRosterPlayer;
+    const html = renderToStaticMarkup(<LeagueRoster players={[injured, healthy]} projectionLabel="W1" leagueId="league-1" />);
+    expect(html).toContain("Questionable");
+    expect(html).not.toContain(">Healthy</span>");
+  });
 });

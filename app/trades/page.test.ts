@@ -55,7 +55,8 @@ describe("Trade Finder route", () => {
 
   it("keeps trade values on the active pool while Explorer uses canonical displayed PPG", () => {
     expect(leagueAnalytics).toContain("getLatestProjectionPool");
-    expect(leagueAnalytics).toContain("projected_ppg: playerValue?.projectedPpg ?? null");
+    expect(leagueAnalytics).toContain("projected_ppg: displayPpg");
+    expect(leagueAnalytics).toContain("displayedProjectionPoints");
     expect(playerLeaders).toContain("const latest = await getLatestProjectionPool(db)");
     expect(playerLeaders).toContain("displayedProjectionPoints");
     expect(playerLeaders).toContain("projected_ppg: projectedPpg");

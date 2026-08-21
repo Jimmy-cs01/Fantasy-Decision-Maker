@@ -31,6 +31,7 @@ export function PlayerValueCard({
           <p className="mt-1 text-sm font-bold text-slate-200">
             {preferred.tier}
           </p>
+          {preferred.injuryStatus !== "healthy" && <p className="mt-2 text-xs text-amber-200">{preferred.injuryStatusLabel} · {preferred.injuryTimeline}{preferred.injuryDataStale ? " · stale (no penalty applied)" : ""}</p>}
           {preferred.depthRole && (
             <p className="mt-1 text-xs font-semibold text-cyan-300">
               Depth: {preferred.depthRole}
@@ -89,6 +90,7 @@ export function PlayerValueCard({
           <b className="text-slate-200">{preferred.ceilingValue.toFixed(1)}</b>
         </span>
         <span>{preferred.expectedGamesRemaining} expected games</span>
+        {preferred.availabilityAdjustment < -0.05 && <span className="text-rose-300">Healthy value {preferred.healthyValue.toFixed(1)} · availability {preferred.availabilityAdjustment.toFixed(1)}</span>}
         {preferred.draftLabel && (
           <span>
             Draft: <b className="text-slate-200">{preferred.draftLabel}</b>

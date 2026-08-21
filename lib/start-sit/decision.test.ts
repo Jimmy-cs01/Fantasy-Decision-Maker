@@ -43,4 +43,10 @@ describe("Start / Sit decisions", () => {
     expect(resolveStartSitScoringSettings({ rec: 1.5, rec_fd: 0.5 }, "standard")).toEqual({ rec: 1.5, rec_fd: 0.5 });
     expect(resolveStartSitScoringSettings(null, "half_ppr")).toEqual({ rec: 0.5 });
   });
+
+  it("never recommends a confirmed unavailable player over an active option", () => {
+    const result = recommendStarts([player("out-star", "RB", 20, { injuryStatus: "out" }), player("healthy", "RB", 8)]);
+    expect(result[0].id).toBe("healthy");
+    expect(result.find((row) => row.id === "out-star")?.warnings).toContain("Unavailable for this game");
+  });
 });

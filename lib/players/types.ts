@@ -52,8 +52,17 @@ export interface ProjectedPlayerLeaderRow {
   team: string | null;
   headshot_url: string | null;
   projected_ppg: number;
+  active_game_ppg: number;
   projected_fpts: number;
   player_value: number;
+  healthy_value: number;
+  availability_adjustment: number;
+  injury_status: string;
+  injury_status_label: string;
+  injury_timeline: string;
+  practice_participation: string | null;
+  injury_data_stale: boolean;
+  current_week_active_probability: number;
   overall_rank: number;
   position_rank: number;
   depth_role: string | null;

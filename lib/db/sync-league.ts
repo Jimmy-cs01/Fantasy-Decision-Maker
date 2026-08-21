@@ -2,6 +2,8 @@ import { sleeperClient } from "@/lib/sleeper/client";
 import { normalizeLeague, normalizeRoster, normalizeSleeperAccount, normalizeSleeperPlayer } from "@/lib/sleeper/service";
 import type { SleeperUser } from "@/lib/sleeper/types";
 import { assignStarterSlots } from "@/lib/fantasy/roster-order";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { syncSleeperInjuries } from "@/lib/injuries/sync";
 
 type Database = any;
 const ensure = (error: { message: string } | null) => { if (error) throw new Error(error.message); };
@@ -22,5 +24,9 @@ export async function synchronizeLeague(db: Database, ownerId: string, sleeperUs
   for (const remoteRoster of sleeperRosters) { const team = localTeams.find((t: any) => t.sleeper_roster_id === remoteRoster.roster_id); if (!team) continue; const n = normalizeRoster(remoteRoster); const assignments = assignStarterSlots(n.starter_entries, league.roster_positions ?? []); const { data: roster, error } = await db.from("rosters").upsert({ fantasy_team_id: team.id, starters: n.starter_entries, reserve: n.reserve }, { onConflict: "fantasy_team_id" }).select().single(); ensure(error); ensure((await db.from("roster_players").delete().eq("roster_id", roster.id)).error); const remotePlayers = n.players.map((id) => allPlayers[id]).filter(Boolean).map(normalizeSleeperPlayer); if (remotePlayers.length) { ensure((await db.from("players").upsert(remotePlayers, { onConflict: "sleeper_player_id" })).error); const { data: localPlayers, error: playersError } = await db.from("players").select("id,sleeper_player_id").in("sleeper_player_id", remotePlayers.map((p) => p.sleeper_player_id)); ensure(playersError); ensure((await db.from("roster_players").insert(localPlayers.map((p: any) => { const assignment = assignments.get(p.sleeper_player_id); return { roster_id: roster.id, player_id: p.id, is_starter: Boolean(assignment), roster_slot: assignment?.rosterSlot ?? "BN", roster_slot_index: assignment?.rosterSlotIndex ?? null }; }))).error); } }
   await db.from("leagues").update({ last_synced_at: new Date().toISOString() }).eq("id", localLeague.id);
   if (sync?.id) await db.from("synchronization_records").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", sync.id);
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try { await syncSleeperInjuries(createAdminClient(), allPlayers); }
+    catch (error) { console.warn("League sync completed, but injury refresh failed", error); }
+  }
   return localLeague;
 }

@@ -3,6 +3,7 @@ import type { LeagueAnalyticsPlayer, TeamProjectionSummary } from "@/lib/player-
 import { Card } from "@/components/ui/card";
 import { LeagueRoster } from "./league-roster";
 import { TeamSelector } from "./team-selector";
+import { RosterInjurySummary } from "@/components/injuries/roster-injury-summary";
 
 export interface LeagueOverviewTeam {
   id: string;
@@ -94,6 +95,7 @@ export function LeagueOverview({
         {players.length ? <LeagueRoster players={players} projectionLabel={projectionLabel} leagueId={league.id} playerQuery={playerQuery} /> : <p className="mt-4 rounded-lg border border-dashed border-slate-700 p-5 text-sm text-slate-400">{rosterLoadFailed ? "Roster data is temporarily unavailable. Your league connection is still available; please retry this page." : `No player data was returned for this roster. Some ${providerName} identities may still need canonical mapping.`}</p>}
       </Card>
       <div className="space-y-5">
+        <RosterInjurySummary players={players} playerQuery={playerQuery ?? `?scoring=league&leagueId=${league.id}`} />
         <Card>
           <h2 className="font-bold">League format</h2>
           <dl className="mt-3 space-y-2 text-sm">

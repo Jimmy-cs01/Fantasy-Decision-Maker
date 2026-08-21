@@ -1,5 +1,7 @@
 import { calculateProjectedFantasyPoints, scoringSettingsForMode } from "./scoring";
 import type { ProjectedStatLine, ProjectionScoringMode } from "./types";
+import { availabilityAdjustedPpg } from "../injuries/availability";
+import type { InjuryAvailability } from "../injuries/types";
 
 export const DEFAULT_PROJECTION_SCORING_LABEL = "Jimmy GM default PPR";
 
@@ -17,12 +19,18 @@ export function displayedProjectionPoints(input: {
   position?: string | null;
   mode: ProjectionScoringMode;
   leagueSettings?: Record<string, number>;
+  availability?: InjuryAvailability | null;
 }) {
-  return calculateProjectedFantasyPoints(
+  const activePpg = calculateProjectedFantasyPoints(
     input.stats,
     projectionScoringSettings(input.mode, input.leagueSettings),
     input.position,
   );
+  return availabilityAdjustedPpg(activePpg, input.availability);
+}
+
+export function activeGameProjectionPoints(input: Omit<Parameters<typeof displayedProjectionPoints>[0], "availability">) {
+  return calculateProjectedFantasyPoints(input.stats, projectionScoringSettings(input.mode, input.leagueSettings), input.position);
 }
 
 export function projectionScoringLabel(mode: ProjectionScoringMode, leagueName?: string | null) {

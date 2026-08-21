@@ -4,6 +4,7 @@ import { ArrowDown } from "lucide-react";
 import { PlayerAvatar } from "./player-avatar";
 import type { ProjectedPlayerLeaderRow, ProjectionLeaderSort } from "@/lib/players/types";
 import type { ProjectionScoringMode } from "@/lib/projections/types";
+import { InjuryBadge } from "@/components/injuries/injury-badge";
 
 const POSITION_STATS: Record<string, Array<[string, string]>> = {
   QB: [["pass_attempts", "ATT"], ["completions", "COMP"], ["passing_yards", "PASS YD"], ["passing_touchdowns", "PASS TD"], ["interceptions_thrown", "INT"], ["rushing_yards", "RUSH YD"], ["rushing_touchdowns", "RUSH TD"]],
@@ -27,6 +28,7 @@ export function ProjectedPlayerLeaderboard({ rows, activeSort, leagueId, scoring
         <div className="min-w-0">
           <PlayerLink playerId={row.player_id} query={`?season=2026&scoring=${scoring}${leagueId ? `&leagueId=${leagueId}` : ""}`} className="block truncate text-sm font-black sm:text-base">{row.full_name}</PlayerLink>
           <p className="truncate text-[11px] font-semibold text-slate-400"><span className="text-cyan-300">{row.position}</span> · {row.team ?? "FA"}{row.depth_role ? ` · Depth ${row.depth_role}` : ""} · {row.position}#{row.position_rank}</p>
+          <div className="mt-1"><InjuryBadge status={row.injury_status} label={row.injury_status_label} stale={row.injury_data_stale} /></div>
         </div>
         <div className="text-right"><strong className="block text-lg text-cyan-200">{row.player_value.toFixed(1)}</strong><span className="text-[10px] font-bold text-slate-500">VALUE · #{row.overall_rank}</span></div>
       </div>

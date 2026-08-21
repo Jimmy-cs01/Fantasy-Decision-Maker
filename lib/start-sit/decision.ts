@@ -14,6 +14,11 @@ export interface StartSitCandidate {
   opponent?: string | null;
   isHome?: boolean | null;
   teamImpliedTotal?: number | null;
+  activeGamePpg?: number | null;
+  injuryStatus?: string | null;
+  injuryTimeline?: string | null;
+  practiceParticipation?: string | null;
+  activeProbability?: number | null;
 }
 
 export interface StartSitRecommendation extends StartSitCandidate {
@@ -49,6 +54,7 @@ const clamp = (value: number, minimum: number, maximum: number) =>
  */
 export function startDecisionScore(candidate: StartSitCandidate) {
   if (candidate.projectedPpg == null) return Number.NEGATIVE_INFINITY;
+  if (["out", "ir", "pup", "suspended", "inactive", "nfi"].includes(candidate.injuryStatus ?? "")) return Number.NEGATIVE_INFINITY;
   const downside = candidate.floor == null
     ? 0
     : clamp((candidate.floor - candidate.projectedPpg) * 0.05, -0.5, 0);
@@ -89,6 +95,9 @@ export function recommendStarts(
     if (candidate.confidence === "low") warnings.push("Limited projection confidence");
     if (candidate.floor != null && candidate.ceiling != null && candidate.ceiling - candidate.floor >= 14) warnings.push("Large projection range");
     if (!candidate.depthRole) warnings.push("Depth-chart role unavailable");
+    if (candidate.injuryStatus === "doubtful") warnings.push("Doubtful to play");
+    else if (candidate.injuryStatus === "questionable") warnings.push(`Questionable${candidate.practiceParticipation ? ` · ${candidate.practiceParticipation}` : ""}`);
+    if (["out", "ir", "pup", "suspended", "inactive", "nfi"].includes(candidate.injuryStatus ?? "")) warnings.push("Unavailable for this game");
     return {
       ...candidate,
       rank: index + 1,

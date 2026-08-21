@@ -2,6 +2,7 @@ import type {
   ProjectionConfidence,
   ProjectedStatLine,
 } from "../projections/types";
+import type { InjuryAvailability } from "../injuries/types";
 
 export type FantasyPosition = "QB" | "RB" | "WR" | "TE";
 
@@ -17,6 +18,10 @@ export interface ValuePlayerProjection {
   fullName: string;
   position: FantasyPosition;
   projectedPpg: number;
+  activeGamePpg?: number;
+  activeFloorPpg?: number;
+  activeCeilingPpg?: number;
+  availability?: InjuryAvailability | null;
   floorPpg: number;
   ceilingPpg: number;
   confidence: ProjectionConfidence;
@@ -82,6 +87,16 @@ export interface PlayerValueResult {
   jimmyEdge: number | null;
   tier: string;
   projectedPpg: number;
+  activeGamePpg: number;
+  healthyValue: number;
+  availabilityAdjustment: number;
+  healthyExpectedGamesRemaining: number;
+  injuryStatus: InjuryAvailability["status"];
+  injuryStatusLabel: string;
+  injuryTimeline: string;
+  practiceParticipation: string | null;
+  currentWeekActiveProbability: number;
+  injuryDataStale: boolean;
   replacementPpg: number;
   vorpPerGame: number;
   rosVorp: number;

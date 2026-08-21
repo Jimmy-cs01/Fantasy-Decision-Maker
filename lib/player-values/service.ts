@@ -13,6 +13,10 @@ import {
 import type { CombinedPlayerValue, ValueLeagueConfig } from "./types";
 import { optionalQuery } from "./optional-query";
 import { resolveActiveProjectionModelVersion } from "../projections/active-model";
+import type { InjuryRecord } from "../injuries/types";
+import { expectedGamesRemaining } from "./formula";
+import { getInjuriesByPlayerIds } from "../injuries/service";
+import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -74,16 +78,22 @@ export function calculateValueContexts(
   leagueConfig?: ValueLeagueConfig,
   historyRows: PlayerSeasonRow[] = [],
   depthRoles: Map<string, CurrentDepthRole> = new Map(),
+  injuries: Map<string, InjuryRecord> = new Map(),
+  kickoffByTeam: Map<string, string | null> = new Map(),
 ) {
   const projectionSeason = Number(projectionPool[0]?.season ?? 0);
   const priorsFor = (settings: Record<string, number>) =>
     projectionPriors(historyRows, settings, projectionSeason);
+  const gamesRemaining = expectedGamesRemaining(week);
   const generalPool = scoreProjectionPool(
     projectionPool,
     DEFAULT_VALUE_LEAGUE.scoringSettings,
     priorsFor(DEFAULT_VALUE_LEAGUE.scoringSettings),
     depthRoles,
     historicalValueContexts(historyRows, DEFAULT_VALUE_LEAGUE.scoringSettings, projectionSeason),
+    injuries,
+    gamesRemaining,
+    kickoffByTeam,
   );
   const general = calculatePlayerValues(
     generalPool,
@@ -97,6 +107,9 @@ export function calculateValueContexts(
           priorsFor(leagueConfig.scoringSettings),
           depthRoles,
           historicalValueContexts(historyRows, leagueConfig.scoringSettings, projectionSeason),
+          injuries,
+          gamesRemaining,
+          kickoffByTeam,
         )
     : null;
   const league = leagueConfig && leaguePool
@@ -253,10 +266,13 @@ export async function getPlayerValue(
   const latest = await getLatestProjectionPool(db);
   if (!latest) return null;
   const playerIds = latest.records.map((record) => record.player_id);
-  const [history, depthRoles] = await Promise.all([
+  const [history, depthRoles, injuries, matchups] = await Promise.all([
     getProjectionHistoryRows(db, playerIds, latest.season),
     getCurrentDepthRoles(db, playerIds, latest.season),
+    getInjuriesByPlayerIds(db, playerIds),
+    getWeeklyMatchups(db, latest.season, latest.week),
   ]);
+  const matchupByTeam = matchupContextByTeam(matchups);
   return (
     calculateValueContexts(
       latest.records,
@@ -264,6 +280,8 @@ export async function getPlayerValue(
       leagueConfig,
       history,
       depthRoles,
+      injuries,
+      new Map([...matchupByTeam].map(([team, matchup]) => [team, matchup.kickoff])),
     ).byPlayerId.get(playerId) ?? null
   );
 }

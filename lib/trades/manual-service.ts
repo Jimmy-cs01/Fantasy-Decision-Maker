@@ -5,6 +5,10 @@ import { calculateValueContexts, getCurrentDepthRoles, getLatestProjectionPool, 
 import { projectionIdentity } from "../player-values/projections";
 import { displayedProjectionPoints } from "../projections/presentation";
 import type { TradePlayer } from "./engine";
+import { getInjuriesByPlayerIds } from "../injuries/service";
+import { calculateAvailability } from "../injuries/availability";
+import { expectedGamesRemaining } from "../player-values/formula";
+import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
 
 type DatabaseClient = Parameters<typeof getLatestProjectionPool>[0];
 
@@ -12,11 +16,15 @@ export async function getStandaloneTradePlayerPool(db: DatabaseClient): Promise<
   const latest = await getLatestProjectionPool(db);
   if (!latest) return [];
   const ids = latest.records.map((record) => record.player_id);
-  const [history, depthRoles] = await Promise.all([
+  const [history, depthRoles, injuries, matchups] = await Promise.all([
     getProjectionHistoryRows(db, ids, latest.season),
     getCurrentDepthRoles(db, ids, latest.season),
+    getInjuriesByPlayerIds(db, ids),
+    getWeeklyMatchups(db, latest.season, latest.week),
   ]);
-  const contexts = calculateValueContexts(latest.records, latest.week, undefined, history, depthRoles);
+  const matchupByTeam = matchupContextByTeam(matchups);
+  const kickoffByTeam = new Map([...matchupByTeam].map(([team, matchup]) => [team, matchup.kickoff]));
+  const contexts = calculateValueContexts(latest.records, latest.week, undefined, history, depthRoles, injuries, kickoffByTeam);
   return latest.records.flatMap((record): TradePlayer[] => {
     const identity = projectionIdentity(record);
     const value = contexts.byPlayerId.get(record.player_id)?.general;
@@ -31,7 +39,10 @@ export async function getStandaloneTradePlayerPool(db: DatabaseClient): Promise<
       nflTeam: identity.team,
       headshotUrl: identity.headshot_url,
       value: value.value,
-      projectedPpg: displayedProjectionPoints({ stats: record.projected_stats, position, mode: "ppr" }),
+      projectedPpg: displayedProjectionPoints({ stats: record.projected_stats, position, mode: "ppr", availability: calculateAvailability(injuries.get(record.player_id), expectedGamesRemaining(latest.week), new Date(), identity.team ? kickoffByTeam.get(identity.team) : null) }),
+      injuryStatus: value.injuryStatus,
+      injuryTimeline: value.injuryTimeline,
+      availabilityAdjustment: value.availabilityAdjustment,
       depthRole: depth ? `${depth.depthPosition}${depth.depthRank}` : null,
     }];
   }).sort((left, right) => Number(right.value) - Number(left.value) || left.name.localeCompare(right.name));

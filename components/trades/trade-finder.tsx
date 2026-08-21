@@ -1099,6 +1099,7 @@ function TradePackagePlayer({
           {player.position ?? "—"} · {player.nflTeam ?? "FA"}
           {player.depthRole ? ` · Depth ${player.depthRole}` : ""}
         </small>
+        {player.injuryStatus && !["healthy", "unknown"].includes(player.injuryStatus) ? <small className="block truncate text-amber-300">Availability: {player.injuryStatus.toUpperCase()}{player.injuryTimeline ? ` · ${player.injuryTimeline}` : ""}{player.availabilityAdjustment != null && player.availabilityAdjustment < -0.05 ? ` · Value ${player.availabilityAdjustment.toFixed(1)}` : ""}</small> : null}
         {player.opponent ? (
           <small className="block text-slate-600">
             {player.isHome ? "vs" : "@"} {player.opponent}

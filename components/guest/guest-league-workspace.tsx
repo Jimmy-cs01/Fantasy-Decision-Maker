@@ -229,6 +229,9 @@ function GuestTrades({ payload }: { payload: GuestLeaguePayload }) {
       isHome: player.is_home,
       teamImpliedTotal: player.team_implied_total,
       depthRole: player.depth_role,
+      injuryStatus: player.injury_status,
+      injuryTimeline: player.injury_timeline,
+      availabilityAdjustment: player.availability_adjustment,
     })),
   }));
   return (
@@ -269,6 +272,10 @@ function GuestStartSit({ payload }: { payload: GuestLeaguePayload }) {
     ceiling: player.projection_ceiling,
     confidence: player.confidence as StartSitPlayer["confidence"],
     depthRole: player.depth_role,
+    activeGamePpg: player.active_game_ppg,
+    injuryStatus: player.injury_status,
+    injuryTimeline: player.injury_timeline,
+    practiceParticipation: player.practice_participation,
     opponent: player.opponent,
     isHome: player.is_home,
     teamImpliedTotal: player.team_implied_total,

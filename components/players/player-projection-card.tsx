@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import type { ProjectionResponse } from "@/lib/projections/types";
 import type { MatchupContext } from "@/lib/nfl/types";
 import { projectionScoringLabel } from "@/lib/projections/presentation";
+import { InjuryBadge } from "@/components/injuries/injury-badge";
 
 const labels: Record<string, string> = {
   passAttempts: "Pass Att", completions: "Comp", passingYards: "Pass Yds",
@@ -28,6 +29,7 @@ export function PlayerProjectionCard({ projection, position, matchup = null }: {
       <div>
         <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-cyan-300"><TrendingUp size={16} /> Week {projection.week} projection</div>
         <div className="mt-2 flex items-end gap-2"><span className="text-4xl font-black text-white">{value(projection.projectedPoints)}</span><span className="pb-1 text-sm font-semibold text-slate-400">projected points</span></div>
+        {projection.availability && projection.availability.status !== "healthy" ? <div className="mt-2 space-y-1"><InjuryBadge status={projection.availability.status} label={projection.availability.statusLabel} stale={projection.availability.isStale} /><p className="text-xs text-slate-300">If active: <b>{value(projection.activeGameProjectedPoints)}</b> · {projection.availability.timelineLabel}</p>{projection.availability.practiceParticipation ? <p className="text-xs text-slate-500">Practice: {projection.availability.practiceParticipation}</p> : null}</div> : null}
         <p className="mt-1 text-xs text-slate-500">{projection.scoringMode === "league" ? "Selected Sleeper league scoring" : projectionScoringLabel(projection.scoringMode)} · Model {projection.modelVersion}</p>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">

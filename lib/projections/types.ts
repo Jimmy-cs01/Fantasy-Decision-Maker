@@ -1,4 +1,5 @@
 import type { SleeperScoringSettings } from "../fantasy/league-scoring";
+import type { InjuryAvailability } from "../injuries/types";
 
 export type ProjectionConfidence = "high" | "medium" | "low";
 export type ProjectionScoringMode = "league" | "standard" | "half_ppr" | "ppr";
@@ -80,6 +81,8 @@ export interface ProjectionResponse {
   outlierClassification: "normal" | "watch" | "large" | "extreme" | null;
   diagnostics: Record<string, unknown> | null;
   projectedPoints: number;
+  activeGameProjectedPoints: number;
+  availability: InjuryAvailability | null;
   floor: number;
   median: number;
   ceiling: number;
@@ -93,4 +96,5 @@ export interface ProjectionScoringContext {
   mode: ProjectionScoringMode;
   settings?: SleeperScoringSettings;
   position?: string | null;
+  availability?: InjuryAvailability | null;
 }

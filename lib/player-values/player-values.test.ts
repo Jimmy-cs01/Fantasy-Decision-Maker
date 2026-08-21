@@ -19,6 +19,7 @@ import {
   type ValueProjectionRecord,
   historicalValueContexts,
 } from "./projections";
+import { calculateAvailability } from "../injuries/availability";
 import {
   calculatePositionDemand,
   calculateReplacementProfiles,
@@ -57,6 +58,22 @@ const config = (
 ): ValueLeagueConfig => ({ teams, rosterPositions, scoringSettings: { rec } });
 
 describe("Player Value foundation", () => {
+  it("reduces ROS VORP and value through expected active games while retaining active PPG", () => {
+    const profile = { position: "RB" as const, demandedPlayers: 48, replacementPpg: 8, starterPpg: 12, elitePpg: 18, scarcityDropoff: 10, demandPerTeam: 4 };
+    const healthy = calculatePlayerValue({ ...player("healthy", "RB", 18), activeGamePpg: 18 }, profile, 14);
+    const injured = calculatePlayerValue({
+      ...player("injured", "RB", 0),
+      activeGamePpg: 18,
+      activeFloorPpg: 10,
+      activeCeilingPpg: 28,
+      availability: calculateAvailability({ player_id: "injured", status: "ir", source: "test", fetched_at: "2026-09-01T00:00:00Z", expected_games_missed: 8 }, 14, new Date("2026-09-01T01:00:00Z")),
+    }, profile, 14);
+    expect(injured.activeGamePpg).toBe(18);
+    expect(injured.expectedGamesRemaining).toBe(6);
+    expect(injured.rosVorp).toBeLessThan(healthy.rosVorp);
+    expect(injured.value).toBeLessThan(injured.healthyValue);
+    expect(injured.availabilityAdjustment).toBeLessThan(0);
+  });
   it("uses a generic historical calibration rather than a hardcoded player anchor", () => {
     expect(normalizePlayerValue(315)).toBeCloseTo(49, 1);
     expect(normalizePlayerValue(450)).toBeGreaterThan(50);

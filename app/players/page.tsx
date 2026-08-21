@@ -39,6 +39,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   const mode = season === 2026 && first(params.mode) !== "actual" ? "projected" : "actual";
   const requestedProjectionSort = first(params.sort) as ProjectionLeaderSort | undefined;
   const projectionSort: ProjectionLeaderSort = ["player_value", "value_rank", "projected_ppg", "projected_fpts"].includes(requestedProjectionSort ?? "") ? requestedProjectionSort! : "player_value";
+  const injury = first(params.injury) ?? "all";
   let result = { rows: [], total: 0, pageSize: 50 } as Awaited<ReturnType<typeof getPlayerLeaders>>;
   let projectionResult = { rows: [], total: 0, pageSize: 50, season: null } as Awaited<ReturnType<typeof getProjectedPlayerLeaders>>;
   if (season && !error && mode === "actual") {
@@ -55,7 +56,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     const rosterPositions = selectedLeague?.roster_positions ?? DEFAULT_VALUE_LEAGUE.rosterPositions;
     try {
       projectionResult = await getProjectedPlayerLeaders({
-        position: filters.position, scoring, scoringSettings, sort: projectionSort, page: filters.page,
+        position: filters.position, scoring, scoringSettings, sort: projectionSort, page: filters.page, injury,
         leagueConfig: { teams: Number(selectedLeague?.total_rosters ?? DEFAULT_VALUE_LEAGUE.teams), rosterPositions, scoringSettings },
       });
     } catch (cause) {
@@ -72,6 +73,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       seasonType: filters.seasonType, sort: mode === "projected" ? projectionSort : filters.sort, view: filters.view, mode,
       page: String(filters.page),
       ...(selectedLeague ? { leagueId: selectedLeague.id } : {}),
+      ...(injury !== "all" ? { injury } : {}),
       ...Object.fromEntries(Object.entries(changes).map(([key, item]) => [key, String(item)])),
     });
     return `/players?${query}`;
@@ -116,6 +118,9 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Season type
                   <select name="seasonType" defaultValue={filters.seasonType} className="mt-1 block w-full rounded-lg border bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white"><option value="REG">Regular</option><option value="POST">Postseason</option></select>
                 </label>
+                {mode === "projected" && <label className="col-span-2 text-xs font-bold uppercase tracking-wider text-slate-400">Injury status
+                  <select name="injury" defaultValue={injury} className="mt-1 block w-full rounded-lg border bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white"><option value="all">All players</option><option value="healthy">Healthy</option><option value="injured">All injured</option><option value="questionable">Questionable</option><option value="out">Out</option><option value="ir">IR</option></select>
+                </label>}
                 {scoringLeagues.length > 0 && <label className="col-span-2 text-xs font-bold uppercase tracking-wider text-slate-400">Sleeper league
                   <select name="leagueId" defaultValue={selectedLeague?.id} className="mt-1 block w-full rounded-lg border bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white">{scoringLeagues.map((league) => <option key={league.id} value={league.id}>{league.name} · {league.season}</option>)}</select>
                   <span className="mt-1 block normal-case tracking-normal text-slate-500">League scoring uses supported Sleeper passing, rushing, receiving, reception-bonus, and first-down values.</span>

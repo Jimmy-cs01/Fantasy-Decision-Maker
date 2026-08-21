@@ -339,6 +339,11 @@ export function calculatePlayerValue(
   profile: PositionReplacementProfile,
   expectedGames: number,
 ): PlayerValueResult {
+  const availability = player.availability;
+  const activeMedianPpg = player.activeGamePpg ?? player.projectedPpg;
+  const activeFloorPpg = player.activeFloorPpg ?? player.floorPpg;
+  const activeCeilingPpg = player.activeCeilingPpg ?? player.ceilingPpg;
+  const activeGames = availability?.expectedActiveGamesRemaining ?? expectedGames;
   const ageAdjustment = ageUpsidePpg(player);
   const depthAdjustment = depthOpportunityPpg(player, profile);
   const draftAdjustment = draftContextPpg(player);
@@ -352,29 +357,39 @@ export function calculatePlayerValue(
     ageAdjustment < 0 ? ageAdjustment : positiveAgeAdjustment;
   const contextualPpg = gatedAgeAdjustment + depthAdjustment + draftAdjustment + historicalUpsideAdjustment;
   const raw = calculateRawPlayerValue({
-    medianPpg: player.projectedPpg,
-    floorPpg: player.floorPpg,
-    ceilingPpg: player.ceilingPpg,
-    expectedGames,
+    medianPpg: activeMedianPpg,
+    floorPpg: activeFloorPpg,
+    ceilingPpg: activeCeilingPpg,
+    expectedGames: activeGames,
     profile,
     confidence: player.confidence,
     contextualPpg,
     productionConfidence: opportunity,
   });
   const productionRaw = calculateRawPlayerValue({
-    medianPpg: player.projectedPpg,
-    floorPpg: player.floorPpg,
-    ceilingPpg: player.ceilingPpg,
-    expectedGames,
+    medianPpg: activeMedianPpg,
+    floorPpg: activeFloorPpg,
+    ceilingPpg: activeCeilingPpg,
+    expectedGames: activeGames,
     profile,
     confidence: player.confidence,
     productionConfidence: opportunity,
   });
   const productionValue = normalizePlayerValue(productionRaw.rawValue);
   const value = normalizePlayerValue(raw.rawValue);
+  const healthyValue = normalizePlayerValue(calculateRawPlayerValue({
+    medianPpg: activeMedianPpg,
+    floorPpg: activeFloorPpg,
+    ceilingPpg: activeCeilingPpg,
+    expectedGames,
+    profile,
+    confidence: player.confidence,
+    contextualPpg,
+    productionConfidence: opportunity,
+  }).rawValue);
   const floorValue = scenarioValue(
     player.floorPpg,
-    expectedGames,
+    activeGames,
     profile,
     player.confidence,
     opportunity,
@@ -382,7 +397,7 @@ export function calculatePlayerValue(
   );
   const ceilingValue = scenarioValue(
     player.ceilingPpg,
-    expectedGames,
+    activeGames,
     profile,
     player.confidence,
     opportunity,
@@ -400,6 +415,16 @@ export function calculatePlayerValue(
     jimmyEdge: null,
     tier: playerValueTier(value),
     projectedPpg: round(player.projectedPpg),
+    activeGamePpg: round(activeMedianPpg),
+    healthyValue,
+    availabilityAdjustment: round(value - healthyValue),
+    healthyExpectedGamesRemaining: expectedGames,
+    injuryStatus: availability?.status ?? "healthy",
+    injuryStatusLabel: availability?.statusLabel ?? "Healthy",
+    injuryTimeline: availability?.timelineLabel ?? "No injury designation",
+    practiceParticipation: availability?.practiceParticipation ?? null,
+    currentWeekActiveProbability: availability?.currentWeekActiveProbability ?? 1,
+    injuryDataStale: availability?.isStale ?? false,
     replacementPpg: round(profile.replacementPpg),
     vorpPerGame: round(raw.vorpPerGame),
     rosVorp: round(raw.rosVorp),
@@ -408,7 +433,7 @@ export function calculatePlayerValue(
     medianValue: value,
     ceilingValue: Math.max(value, ceilingValue),
     confidence: player.confidence,
-    expectedGamesRemaining: expectedGames,
+    expectedGamesRemaining: activeGames,
     priorSeasonPpg: player.priorSeasonPpg ?? null,
     priorWeight: round(player.priorWeight ?? 0),
     ageAdjustment: round(gatedAgeAdjustment),

@@ -21,6 +21,9 @@ export interface TradePlayer {
   isHome?: boolean | null;
   teamImpliedTotal?: number | null;
   depthRole?: string | null;
+  injuryStatus?: string | null;
+  injuryTimeline?: string | null;
+  availabilityAdjustment?: number | null;
 }
 
 export interface TeamTradeImpact {

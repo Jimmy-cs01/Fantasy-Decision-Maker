@@ -10,7 +10,11 @@ import type { ValueLeagueConfig } from "@/lib/player-values/types";
 import { calculateHistoricalPositionFinishes } from "./position-finishes";
 import { resolveCanonicalPlayerId } from "./identifiers";
 import { publicDataError } from "./data-errors";
-import { displayedProjectionPoints } from "@/lib/projections/presentation";
+import { activeGameProjectionPoints, displayedProjectionPoints } from "@/lib/projections/presentation";
+import { getInjuriesByPlayerIds } from "@/lib/injuries/service";
+import { calculateAvailability } from "@/lib/injuries/availability";
+import { expectedGamesRemaining } from "@/lib/player-values/formula";
+import { getWeeklyMatchups, matchupContextByTeam } from "@/lib/nfl/schedule-service";
 
 async function attachHeadshots(db: Awaited<ReturnType<typeof createClient>>, rows: PlayerSeasonRow[]) {
   if (!rows.length) return rows;
@@ -41,17 +45,22 @@ export async function getProjectedPlayerLeaders(options: {
   leagueConfig?: ValueLeagueConfig;
   sort: ProjectionLeaderSort;
   page: number;
+  injury?: string;
 }) {
   const db = await createClient();
   const latest = await getLatestProjectionPool(db);
   const pageSize = 50;
   if (!latest) return { rows: [] as ProjectedPlayerLeaderRow[], total: 0, pageSize, season: null };
   const playerIds = latest.records.map((record) => record.player_id);
-  const [history, depthRoles] = await Promise.all([
+  const [history, depthRoles, injuries, matchups] = await Promise.all([
     getProjectionHistoryRows(db, playerIds, latest.season),
     getCurrentDepthRoles(db, playerIds, latest.season),
+    getInjuriesByPlayerIds(db, playerIds),
+    getWeeklyMatchups(db, latest.season, latest.week),
   ]);
-  const contexts = calculateValueContexts(latest.records, latest.week, options.leagueConfig, history, depthRoles);
+  const matchupByTeam = matchupContextByTeam(matchups);
+  const kickoffByTeam = new Map([...matchupByTeam].map(([team, matchup]) => [team, matchup.kickoff]));
+  const contexts = calculateValueContexts(latest.records, latest.week, options.leagueConfig, history, depthRoles, injuries, kickoffByTeam);
   const records = new Map(latest.records.map((record) => [record.player_id, record]));
   let rows = [...contexts.byPlayerId.values()].flatMap((context): ProjectedPlayerLeaderRow[] => {
     const value = context.league ?? context.general;
@@ -63,7 +72,9 @@ export async function getProjectedPlayerLeaders(options: {
       position: value.position,
       mode: options.scoring,
       leagueSettings: options.scoring === "league" ? options.scoringSettings : undefined,
+      availability: calculateAvailability(injuries.get(value.playerId), expectedGamesRemaining(latest.week), new Date(), identity.team ? kickoffByTeam.get(identity.team) : null),
     });
+    const activeGamePpg = activeGameProjectionPoints({ stats: record!.projected_stats, position: value.position, mode: options.scoring, leagueSettings: options.scoring === "league" ? options.scoringSettings : undefined });
     return [{
       player_id: value.playerId,
       full_name: value.fullName,
@@ -73,6 +84,15 @@ export async function getProjectedPlayerLeaders(options: {
       projected_ppg: projectedPpg,
       projected_fpts: Math.round(projectedPpg * value.expectedGamesRemaining * 10) / 10,
       player_value: value.value,
+      active_game_ppg: activeGamePpg,
+      healthy_value: value.healthyValue,
+      availability_adjustment: value.availabilityAdjustment,
+      injury_status: value.injuryStatus,
+      injury_status_label: value.injuryStatusLabel,
+      injury_timeline: value.injuryTimeline,
+      practice_participation: value.practiceParticipation,
+      injury_data_stale: value.injuryDataStale,
+      current_week_active_probability: value.currentWeekActiveProbability,
       overall_rank: value.overallRank,
       position_rank: value.positionRank,
       depth_role: value.depthRole,
@@ -82,6 +102,9 @@ export async function getProjectedPlayerLeaders(options: {
   rows = rows.filter((row) => options.position === "ALL"
     ? FANTASY_POSITIONS.includes(row.position as typeof FANTASY_POSITIONS[number])
     : options.position === "FLEX" ? ["RB", "WR", "TE"].includes(row.position) : row.position === options.position);
+  if (options.injury === "healthy") rows = rows.filter((row) => row.injury_status === "healthy");
+  else if (options.injury === "injured") rows = rows.filter((row) => !["healthy", "unknown"].includes(row.injury_status));
+  else if (options.injury && options.injury !== "all") rows = rows.filter((row) => row.injury_status === options.injury);
   const key: Record<ProjectionLeaderSort, keyof ProjectedPlayerLeaderRow> = {
     player_value: "player_value", value_rank: "overall_rank", projected_ppg: "projected_ppg", projected_fpts: "projected_fpts",
   };

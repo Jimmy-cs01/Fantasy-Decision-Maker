@@ -14,4 +14,9 @@ describe("NFL matchup context", () => {
     expect(contexts.get("BUF")).toMatchObject({ opponent: "KC", isHome: true, spread: -3, teamImpliedTotal: 27.25 });
     expect(contexts.get("KC")).toMatchObject({ opponent: "BUF", isHome: false, spread: 3, teamImpliedTotal: 24.25 });
   });
+
+  it("normalizes nflverse LA to the canonical LAR team before availability lookup", () => {
+    const game: WeeklyMatchup = { id: "la", nflverseGameId: "la", season: 2026, week: 1, kickoff: "2026-09-11T00:35:00Z", homeTeam: "LA", awayTeam: "SF", neutralSite: false, externalGameId: null, homeSpread: null, gameTotal: null, homeImpliedTotal: null, awayImpliedTotal: null, booksReporting: 0, latestUpdate: null };
+    expect(matchupContextByTeam([game]).get("LAR")).toMatchObject({ opponent: "SF", kickoff: game.kickoff });
+  });
 });

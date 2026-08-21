@@ -13,7 +13,7 @@ const weekly = (week: number, points: number): WeeklyProjectionView => ({
     playerId: "p1", season: 2026, week, seasonType: "REG", team: "MIN", opponent: week === 1 ? "GB" : "CHI",
     stats: {}, modelProjection: points, vegasProjection: null, opportunityAdjustedProjection: null, sleeperProjection: null,
     modelWeight: null, vegasConfidence: null, opportunityConfidence: null, sanityAdjustment: null, outlierClassification: null,
-    diagnostics: null, projectedPoints: points, floor: points - 5, median: points, ceiling: points + 6,
+    diagnostics: null, projectedPoints: points, activeGameProjectedPoints: points, availability: null, floor: points - 5, median: points, ceiling: points + 6,
     confidence: "high", drivers: [], scoringMode: "ppr", modelVersion: "v2",
   },
 });

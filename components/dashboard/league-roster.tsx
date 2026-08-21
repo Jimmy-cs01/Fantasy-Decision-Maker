@@ -1,5 +1,6 @@
 import { PlayerAvatar } from "../players/player-avatar";
 import { PlayerLink } from "../players/player-link";
+import { InjuryBadge } from "../injuries/injury-badge";
 
 export interface LeagueRosterPlayer {
   id: string;
@@ -16,6 +17,9 @@ export interface LeagueRosterPlayer {
   overall_rank: number | null;
   value_tier: string | null;
   confidence: string | null;
+  injury_status?: string | null;
+  injury_status_label?: string | null;
+  injury_data_stale?: boolean;
 }
 
 export function LeagueRoster({ players, projectionLabel, leagueId, playerQuery }: { players: LeagueRosterPlayer[]; projectionLabel: string | null; leagueId: string; playerQuery?: string }) {
@@ -60,6 +64,7 @@ function RosterRow({ player, bench, leagueId, playerQuery }: { player: LeagueRos
       <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 sm:text-xs">
         {player.team || "FA"} <span aria-hidden="true">•</span> {player.position || "—"}
       </p>
+      <div className="mt-1"><InjuryBadge status={player.injury_status} label={player.injury_status_label} stale={player.injury_data_stale} /></div>
     </div>
     <span className="text-right tabular-nums" aria-label={ppg == null ? "Projected PPG unavailable" : `${ppg.toFixed(1)} projected points per game`}>
       <span className="block text-sm font-black text-slate-100">{ppg == null ? "—" : ppg.toFixed(1)}</span>

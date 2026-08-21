@@ -1,5 +1,6 @@
 import type { createClient } from "../supabase/server";
 import { optionalQuery } from "../player-values/optional-query";
+import { normalizeNflTeam } from "./teams";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -75,7 +76,7 @@ export async function getWeeklyMatchups(db: DatabaseClient, season: number, week
 
 export function matchupContextByTeam(matchups: WeeklyMatchup[]) {
   return new Map(matchups.flatMap((game) => [
-    [game.homeTeam, { opponent: game.awayTeam, isHome: true, kickoff: game.kickoff, teamImpliedTotal: game.homeImpliedTotal, opponentImpliedTotal: game.awayImpliedTotal, spread: game.homeSpread, gameTotal: game.gameTotal }],
-    [game.awayTeam, { opponent: game.homeTeam, isHome: false, kickoff: game.kickoff, teamImpliedTotal: game.awayImpliedTotal, opponentImpliedTotal: game.homeImpliedTotal, spread: game.homeSpread == null ? null : -game.homeSpread, gameTotal: game.gameTotal }],
+    [normalizeNflTeam(game.homeTeam) ?? game.homeTeam, { opponent: normalizeNflTeam(game.awayTeam) ?? game.awayTeam, isHome: true, kickoff: game.kickoff, teamImpliedTotal: game.homeImpliedTotal, opponentImpliedTotal: game.awayImpliedTotal, spread: game.homeSpread, gameTotal: game.gameTotal }],
+    [normalizeNflTeam(game.awayTeam) ?? game.awayTeam, { opponent: normalizeNflTeam(game.homeTeam) ?? game.homeTeam, isHome: false, kickoff: game.kickoff, teamImpliedTotal: game.awayImpliedTotal, opponentImpliedTotal: game.homeImpliedTotal, spread: game.homeSpread == null ? null : -game.homeSpread, gameTotal: game.gameTotal }],
   ]));
 }

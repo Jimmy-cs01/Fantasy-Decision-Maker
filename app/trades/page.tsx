@@ -105,6 +105,9 @@ export default async function TradesPage({
         isHome: player.is_home,
         teamImpliedTotal: player.team_implied_total,
         depthRole: player.depth_role,
+        injuryStatus: player.injury_status,
+        injuryTimeline: player.injury_timeline,
+        availabilityAdjustment: player.availability_adjustment,
       })),
     };
   });
