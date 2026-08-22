@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { friendlyAuthError } from "@/lib/auth/errors";
+import { authErrorDiagnostics, friendlyAuthError } from "@/lib/auth/errors";
 import { getAuthCallbackUrl, getPasswordRecoveryUrl } from "@/lib/auth/urls";
 import {
   loginSchema,
@@ -60,7 +60,17 @@ export async function signUp(formData: FormData) {
     password: parsed.data.password,
     options: { emailRedirectTo: getAuthCallbackUrl(next) },
   });
-  if (error) redirectWithError("/signup", friendlyAuthError(error), next);
+  if (error) {
+    console.error("Supabase signup failed", authErrorDiagnostics(error));
+    redirectWithError("/signup", friendlyAuthError(error), next);
+  }
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    redirectWithError(
+      "/login",
+      "An account may already exist for this email. Log in or reset your password.",
+      next,
+    );
+  }
   if (data.session) redirect(next);
   const query = new URLSearchParams({
     message: "Check your email to confirm your account.",

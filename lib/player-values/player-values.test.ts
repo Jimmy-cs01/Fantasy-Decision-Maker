@@ -10,6 +10,7 @@ import {
   opportunityConfidence,
   playerValueTier,
   historicalUpsidePpg,
+  rookieProtectionPpg,
 } from "./formula";
 import { optimizeProjectedLineup } from "./lineup";
 import {
@@ -58,6 +59,40 @@ const config = (
 ): ValueLeagueConfig => ({ teams, rosterPositions, scoringSettings: { rec } });
 
 describe("Player Value foundation", () => {
+  it("protects an early first-round rookie RB with a starting role more than other rookie archetypes", () => {
+    const rookie = (position: FantasyPosition, round: number | null, rank: number, pick = 10) => ({
+      ...player(`${position}-${round}-${rank}`, position, 7),
+      season: 2026,
+      rookieSeason: 2026,
+      historicalGames: 0,
+      draftStatus: round ? "drafted" as const : "undrafted" as const,
+      draftRound: round,
+      draftPick: round ? pick : null,
+      depthRank: rank,
+    });
+    const eliteRb = rookieProtectionPpg(rookie("RB", 1, 1));
+    const firstRoundWr = rookieProtectionPpg(rookie("WR", 1, 1));
+    const firstRoundQb = rookieProtectionPpg(rookie("QB", 1, 1));
+    const dayTwoRb = rookieProtectionPpg(rookie("RB", 3, 2, 75));
+    const dayThreeRb = rookieProtectionPpg(rookie("RB", 5, 3, 150));
+    const undraftedRb = rookieProtectionPpg(rookie("RB", null, 1));
+    expect(eliteRb).toBe(7.5);
+    expect(eliteRb).toBeGreaterThan(firstRoundWr);
+    expect(firstRoundQb).toBeLessThan(eliteRb);
+    expect(dayTwoRb).toBeGreaterThan(dayThreeRb);
+    expect(undraftedRb).toBe(0);
+  });
+
+  it("decays rookie protection as NFL evidence accumulates and respects a buried role", () => {
+    const base = {
+      ...player("rookie-rb", "RB", 8), season: 2026, rookieSeason: 2026,
+      draftStatus: "drafted" as const, draftRound: 1, draftPick: 8, depthRank: 1,
+    };
+    expect(rookieProtectionPpg({ ...base, historicalGames: 8 })).toBeLessThan(rookieProtectionPpg({ ...base, historicalGames: 0 }));
+    expect(rookieProtectionPpg({ ...base, historicalGames: 16 })).toBe(0);
+    expect(rookieProtectionPpg({ ...base, depthRank: 4 })).toBeLessThan(0.5);
+  });
+
   it("reduces ROS VORP and value through expected active games while retaining active PPG", () => {
     const profile = { position: "RB" as const, demandedPlayers: 48, replacementPpg: 8, starterPpg: 12, elitePpg: 18, scarcityDropoff: 10, demandPerTeam: 4 };
     const healthy = calculatePlayerValue({ ...player("healthy", "RB", 18), activeGamePpg: 18 }, profile, 14);

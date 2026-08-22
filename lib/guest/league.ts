@@ -9,6 +9,9 @@ import {
 import { sleeperClient } from "@/lib/sleeper/client";
 import { normalizeLeague, normalizeRoster } from "@/lib/sleeper/service";
 import { createClient } from "@/lib/supabase/server";
+import { buildWaiverWire, type SleeperTransactionLike } from "@/lib/waivers/availability";
+import { buildHeadToHeadSchedule } from "@/lib/leagues/head-to-head";
+import { projectLeagueSchedule } from "@/lib/leagues/projection-schedule";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -32,7 +35,11 @@ async function loadCanonicalPlayers(db: DatabaseClient, sleeperIds: string[]) {
   return new Map(rows.flatMap((row) => row.sleeper_player_id ? [[row.sleeper_player_id, row] as const] : []));
 }
 
-export async function loadGuestLeague(username: string, leagueId: string) {
+export async function loadGuestLeague(
+  username: string,
+  leagueId: string,
+  options: { view?: string } = {},
+) {
   const sleeperUser = await sleeperClient.getUser(username);
   if (!sleeperUser) throw new Error("Sleeper user was not found.");
   const [league, users, sleeperRosters, sleeperPlayers] = await Promise.all([
@@ -107,6 +114,54 @@ export async function loadGuestLeague(username: string, leagueId: string) {
     rosters,
     rosterPlayers,
   );
+  const currentWeek = analytics.projectionWeek ?? 1;
+  const transactions = options.view === "waivers"
+    ? await sleeperClient.getTransactions(leagueId, currentWeek)
+        .catch((error) => {
+          console.warn("Sleeper waiver transaction lookup failed; continuing with roster availability", error);
+          return [];
+        }) as SleeperTransactionLike[]
+    : [];
+  const waivers = options.view === "waivers"
+    ? buildWaiverWire({
+        projectionPool: analytics.projectionPool,
+        rosteredPlayerIds: rosteredSleeperIds,
+        transactions,
+      })
+    : [];
+  let headToHead = null;
+  if (options.view === "league-matchups") {
+    const matchupResults = await Promise.all(
+      Array.from({ length: 17 }, (_, index) => sleeperClient.getMatchups(leagueId, index + 1)
+        .catch((error) => {
+          console.warn(`Sleeper matchup lookup failed for week ${index + 1}; continuing with published weeks`, error);
+          return [];
+        })),
+    );
+    const projectionSchedule = await projectLeagueSchedule({
+      db,
+      season: Number(league.season),
+      teams: teams.map((team) => ({
+        id: team.id,
+        players: analytics.rostersByTeam.get(team.id) ?? [],
+      })),
+      rosterPositions: league.roster_positions ?? [],
+      scoringSettings: league.scoring_settings ?? { rec: 1 },
+    });
+    headToHead = {
+      rows: buildHeadToHeadSchedule({
+        teams,
+        matchupRowsByWeek: new Map(matchupResults.map((rows, index) => [index + 1, rows])),
+        projections: projectionSchedule.projections,
+        currentWeek: projectionSchedule.currentWeek,
+      }),
+      currentWeek: projectionSchedule.currentWeek,
+      dstCoverage: projectionSchedule.dstCoverage,
+      playerNames: Object.fromEntries(
+        [...new Map(analytics.projectionPool.map((player) => [player.id, player.full_name])).entries()],
+      ),
+    };
+  }
 
   return {
     league: {
@@ -131,5 +186,7 @@ export async function loadGuestLeague(username: string, leagueId: string) {
     analyticsAvailable: analytics.analyticsAvailable,
     projectionSeason: analytics.projectionSeason,
     projectionWeek: analytics.projectionWeek,
+    waivers,
+    headToHead,
   };
 }

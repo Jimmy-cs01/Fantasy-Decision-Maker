@@ -26,6 +26,10 @@ import type {
   LeagueAnalyticsPlayer,
   TeamProjectionSummary,
 } from "@/lib/player-values/league-service";
+import type { WaiverWirePlayer } from "@/lib/waivers/availability";
+import type { HeadToHeadScheduleRow } from "@/lib/leagues/head-to-head";
+import { WaiverWire } from "@/components/waivers/waiver-wire";
+import { HeadToHeadSchedule } from "@/components/league/head-to-head-schedule";
 
 interface GuestTeam {
   id: string;
@@ -55,9 +59,16 @@ interface GuestLeaguePayload {
   analyticsAvailable: boolean;
   projectionSeason: number | null;
   projectionWeek: number | null;
+  waivers: WaiverWirePlayer[];
+  headToHead: {
+    rows: HeadToHeadScheduleRow[];
+    currentWeek: number;
+    dstCoverage: { projectionEnabled: boolean; reason: string };
+    playerNames: Record<string, string>;
+  } | null;
 }
 
-const GUEST_VIEWS = new Set(["overview", "trades", "start-sit", "season"]);
+const GUEST_VIEWS = new Set(["overview", "trades", "start-sit", "season", "waivers", "league-matchups"]);
 
 export function GuestLeagueWorkspace({ leagueId }: { leagueId: string }) {
   const query = useSearchParams();
@@ -69,6 +80,7 @@ export function GuestLeagueWorkspace({ leagueId }: { leagueId: string }) {
   const session = useGuestSession();
   const [result, setResult] = useState<{
     leagueId: string;
+    view: string;
     payload: GuestLeaguePayload | null;
     error: string;
   } | null>(null);
@@ -79,20 +91,21 @@ export function GuestLeagueWorkspace({ leagueId }: { leagueId: string }) {
     writeGuestSession({ ...current, selectedLeagueId: leagueId });
     const controller = new AbortController();
     fetch(
-      `/api/guest/sleeper/league/${encodeURIComponent(leagueId)}?username=${encodeURIComponent(current.sleeperUsername)}`,
+      `/api/guest/sleeper/league/${encodeURIComponent(leagueId)}?username=${encodeURIComponent(current.sleeperUsername)}&view=${encodeURIComponent(view)}`,
       { signal: controller.signal },
     )
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok)
           throw new Error(result.error ?? "Unable to load guest league.");
-        setResult({ leagueId, payload: result, error: "" });
+        setResult({ leagueId, view, payload: result, error: "" });
       })
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
           return;
         setResult({
           leagueId,
+          view,
           payload: null,
           error:
             cause instanceof Error
@@ -101,7 +114,7 @@ export function GuestLeagueWorkspace({ leagueId }: { leagueId: string }) {
         });
       });
     return () => controller.abort();
-  }, [leagueId]);
+  }, [leagueId, view]);
 
   if (session === null)
     return (
@@ -109,7 +122,7 @@ export function GuestLeagueWorkspace({ leagueId }: { leagueId: string }) {
         <GuestExpired />
       </AppShell>
     );
-  if (!result || result.leagueId !== leagueId)
+  if (!result || result.leagueId !== leagueId || result.view !== view)
     return (
       <AppShell guest guestView={view}>
         <p className="mx-auto max-w-6xl rounded-xl border border-slate-800 p-6 text-slate-400">
@@ -144,8 +157,18 @@ export function GuestLeagueWorkspace({ leagueId }: { leagueId: string }) {
     {view === "trades" ? <GuestTrades payload={payload} /> : null}
     {view === "start-sit" ? <GuestStartSit payload={payload} /> : null}
     {view === "season" ? <GuestSeason payload={payload} /> : null}
+    {view === "waivers" ? <GuestWaivers payload={payload} /> : null}
+    {view === "league-matchups" ? <GuestLeagueMatchups payload={payload} /> : null}
     </AppShell>
   );
+}
+
+function GuestWaivers({ payload }: { payload: GuestLeaguePayload }) {
+  return <div className="mx-auto max-w-6xl"><header><p className="text-xs font-black tracking-[.2em] text-cyan-300">AVAILABLE IN YOUR LEAGUE</p><h1 className="mt-1 text-3xl font-black">Waiver Wire</h1><p className="mt-2 text-sm text-slate-400">The best projected players who are not rostered anywhere in {payload.league.name}.</p></header><div className="mt-5"><WaiverWire players={payload.waivers} playerQuery="?scoring=ppr" /></div></div>;
+}
+
+function GuestLeagueMatchups({ payload }: { payload: GuestLeaguePayload }) {
+  return <div className="mx-auto max-w-6xl"><header><p className="text-xs font-black tracking-[.2em] text-cyan-300">FANTASY SCHEDULE</p><h1 className="mt-1 text-3xl font-black">Weekly Matchups</h1><p className="mt-2 text-sm text-slate-400">Your Sleeper head-to-head schedule with projected optimal lineups and automatic NFL bye handling.</p></header><div className="mt-5">{payload.headToHead ? <HeadToHeadSchedule rows={payload.headToHead.rows} currentWeek={payload.headToHead.currentWeek} playerNames={payload.headToHead.playerNames} dstMessage={payload.headToHead.dstCoverage.projectionEnabled ? null : payload.headToHead.dstCoverage.reason} /> : <Card className="text-center text-slate-400">Sleeper matchup data is unavailable.</Card>}</div></div>;
 }
 
 function GuestExpired() {

@@ -238,6 +238,53 @@ export function draftContextPpg(player: ValuePlayerProjection) {
   return base * (1 - established);
 }
 
+/**
+ * Bounded, value-only protection for low-history rookies. It represents
+ * organizational investment and near-term role security; it never changes the
+ * football projection displayed to users. Real NFL games rapidly decay it.
+ */
+export function rookieProtectionPpg(player: ValuePlayerProjection) {
+  if (!player.season || !player.rookieSeason) return 0;
+  const seasonDistance = player.season - player.rookieSeason;
+  if (seasonDistance < 0 || seasonDistance > 1) return 0;
+  const games = Math.max(0, player.historicalGames ?? 0);
+  const evidenceDecay =
+    clamp(1 - games / 16, 0, 1) * (seasonDistance === 0 ? 1 : 0.25);
+  if (
+    evidenceDecay <= 0 ||
+    player.draftStatus !== "drafted" ||
+    !player.draftRound
+  ) return 0;
+  const rank = player.depthRank ?? 99;
+  const roleFactor =
+    rank === 1 ? 1 : rank === 2 ? 0.62 : rank === 3 ? 0.25 : 0.05;
+  const pick = player.draftPick ?? 999;
+  const targetByPosition: Record<
+    ValuePlayerProjection["position"],
+    number[]
+  > = {
+    RB: [pick <= 16 ? 14.5 : 13.5, 11.5, 9.5, 6.5, 4.5, 3.5, 3],
+    WR: [pick <= 16 ? 10 : 9, 7, 5.5, 3.5, 2.5, 2, 1.5],
+    QB: [rank === 1 ? 15 : 5, rank === 1 ? 10 : 3, 5, 2, 1, 0.5, 0.25],
+    TE: [8, 6.5, 5, 3.5, 2.5, 2, 1.5],
+  };
+  const target =
+    targetByPosition[player.position][Math.min(7, player.draftRound) - 1];
+  const maximum = player.position === "RB"
+    ? player.draftRound === 1 && rank === 1
+      ? 8
+      : player.draftRound <= 2 && rank <= 2
+        ? 5
+        : 3.5
+    : player.position === "WR"
+      ? 3
+      : player.position === "QB" && rank === 1
+        ? 2.5
+        : 1.5;
+  const productionGap = Math.max(0, target - player.projectedPpg);
+  return clamp(productionGap * roleFactor * evidenceDecay, 0, maximum);
+}
+
 export function draftLabel(player: ValuePlayerProjection) {
   if (player.draftStatus === "undrafted") return "UDFA";
   if (player.draftStatus === "drafted" && player.draftRound) {
@@ -347,6 +394,7 @@ export function calculatePlayerValue(
   const ageAdjustment = ageUpsidePpg(player);
   const depthAdjustment = depthOpportunityPpg(player, profile);
   const draftAdjustment = draftContextPpg(player);
+  const rookieProtectionAdjustment = rookieProtectionPpg(player);
   const opportunity = opportunityConfidence(player, profile);
   const historicalUpsideAdjustment = historicalUpsidePpg(player, profile);
   const positiveAgeAdjustment =
@@ -355,7 +403,12 @@ export function calculatePlayerValue(
     depthOpportunityFactor(player, profile);
   const gatedAgeAdjustment =
     ageAdjustment < 0 ? ageAdjustment : positiveAgeAdjustment;
-  const contextualPpg = gatedAgeAdjustment + depthAdjustment + draftAdjustment + historicalUpsideAdjustment;
+  const contextualPpg =
+    gatedAgeAdjustment +
+    depthAdjustment +
+    draftAdjustment +
+    rookieProtectionAdjustment +
+    historicalUpsideAdjustment;
   const raw = calculateRawPlayerValue({
     medianPpg: activeMedianPpg,
     floorPpg: activeFloorPpg,
@@ -439,6 +492,7 @@ export function calculatePlayerValue(
     ageAdjustment: round(gatedAgeAdjustment),
     depthAdjustment: round(depthAdjustment),
     draftAdjustment: round(draftAdjustment),
+    rookieProtectionAdjustment: round(rookieProtectionAdjustment),
     historicalUpsideAdjustment: round(historicalUpsideAdjustment),
     historicalWeightedPpg: player.historicalContext ? round(player.historicalContext.weightedPpg) : null,
     historicalBestPositionRank: player.historicalContext?.bestPositionRank ?? null,

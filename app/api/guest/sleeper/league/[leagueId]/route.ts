@@ -10,13 +10,15 @@ export async function GET(
   const parsed = z.object({
     username: z.string().trim().min(1).max(64),
     leagueId: z.string().trim().min(1).max(64),
+    view: z.enum(["overview", "trades", "start-sit", "season", "waivers", "league-matchups"]).optional(),
   }).safeParse({
     username: new URL(request.url).searchParams.get("username"),
     leagueId,
+    view: new URL(request.url).searchParams.get("view") ?? undefined,
   });
   if (!parsed.success) return NextResponse.json({ error: "Invalid guest league request." }, { status: 400 });
   try {
-    return NextResponse.json(await loadGuestLeague(parsed.data.username, parsed.data.leagueId));
+    return NextResponse.json(await loadGuestLeague(parsed.data.username, parsed.data.leagueId, { view: parsed.data.view }));
   } catch (error) {
     console.warn("Guest Sleeper league load failed", {
       leagueId: parsed.data.leagueId,

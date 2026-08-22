@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { SeasonOutlookView } from "@/components/season/season-outlook-view";
 import { Card } from "@/components/ui/card";
 import { getLeagueRosterAnalytics } from "@/lib/player-values/league-service";
@@ -13,7 +12,7 @@ export default async function SeasonPage({ searchParams }: { searchParams: Promi
   const query = await searchParams;
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
-  if (!user) redirect("/login?next=%2Fseason");
+  if (!user) return <div className="mx-auto max-w-xl"><h1 className="text-3xl font-black">Season Outlook</h1><Card className="mt-5 text-center"><p className="text-slate-300">Season simulations are available in Guest Mode after you choose a Sleeper league.</p><Link href="/guest" className="mt-4 inline-block rounded-xl bg-cyan-400 px-4 py-2 font-black text-slate-950">Continue as Guest</Link></Card></div>;
   const { data: leagues, error: leaguesError } = await db.from("leagues").select("*").eq("owner_id", user.id).not("last_synced_at", "is", null).order("last_synced_at", { ascending: false });
   if (leaguesError) throw new Error(`Unable to load season leagues: ${leaguesError.message}`);
   const league = leagues?.find((item) => item.id === first(query.leagueId)) ?? leagues?.[0] ?? null;

@@ -108,6 +108,8 @@ function guestHref(href: string, leagueId: string | null) {
   if (href === "/trades") return guestLeagueHref(leagueId, "trades");
   if (href === "/start-sit") return guestLeagueHref(leagueId, "start-sit");
   if (href === "/season") return guestLeagueHref(leagueId, "season");
+  if (href === "/waivers") return guestLeagueHref(leagueId, "waivers");
+  if (href === "/league-matchups") return guestLeagueHref(leagueId, "league-matchups");
   if (href === "/dashboard/connect") return "/guest";
   return href;
 }
@@ -121,6 +123,8 @@ function NavigationLinks({ pathname, className, onSelect, guest, guestLeagueId, 
         || (item.href === "/trades" && guestView === "trades")
         || (item.href === "/start-sit" && guestView === "start-sit")
         || (item.href === "/season" && guestView === "season")
+        || (item.href === "/waivers" && guestView === "waivers")
+        || (item.href === "/league-matchups" && guestView === "league-matchups")
       : isNavigationActive(pathname, item);
     return <Link
       key={item.href}

@@ -222,7 +222,13 @@ async function hydrateLeagueRosterAnalytics(
       }),
     ),
   ];
-  const playerIds = latest ? rosteredPlayerIds : [];
+  // Value and role context is also used by the waiver wire. Hydrate the full
+  // active projection pool once so unrostered players use the same league
+  // scoring, injury, depth-chart, and replacement-level calculations as
+  // rostered players.
+  const playerIds = latest
+    ? [...new Set(latest.records.map((record) => record.player_id))]
+    : [];
   const [history, depthRoles, matchups, injuries] = latest
     ? await Promise.all([
         optionalQuery({
@@ -397,6 +403,74 @@ async function hydrateLeagueRosterAnalytics(
       optimalStarterIds: optimal.selectedPlayerIds,
     });
   }
+  const projectionPool = (latest?.records ?? []).flatMap(
+    (record): LeagueAnalyticsPlayer[] => {
+      const identity = Array.isArray(record.players)
+        ? record.players[0]
+        : record.players;
+      if (!identity) return [];
+      const playerValue = values.get(identity.id)?.league;
+      const scoredProjection = valueContexts?.leagueProjections.get(identity.id)
+        ?? valueContexts?.generalProjections.get(identity.id);
+      const availability = latest
+        ? calculateAvailability(
+            injuries.get(identity.id),
+            expectedGamesRemaining(latest.week),
+            new Date(),
+            identity.team ? kickoffByTeam.get(identity.team) : null,
+          )
+        : null;
+      const activeDisplayPpg = activeGameProjectionPoints({
+        stats: record.projected_stats,
+        position: identity.sleeper_position ?? identity.position ?? identity.historical_position,
+        mode: "league",
+        leagueSettings: scoringSettings,
+      });
+      const displayPpg = displayedProjectionPoints({
+        stats: record.projected_stats,
+        position: identity.sleeper_position ?? identity.position ?? identity.historical_position,
+        mode: "league",
+        leagueSettings: scoringSettings,
+        availability,
+      });
+      const activeFloor = Math.max(0, activeDisplayPpg + Number(record.residual_low));
+      const activeCeiling = Math.max(0, activeDisplayPpg + Number(record.residual_high));
+      const matchup = identity.team ? matchupByTeam.get(identity.team) : null;
+      return [{
+        id: identity.id,
+        sleeper_player_id: identity.sleeper_player_id,
+        full_name: identity.full_name,
+        position: identity.sleeper_position ?? identity.position ?? identity.historical_position,
+        team: identity.team,
+        headshot_url: identity.headshot_url,
+        is_starter: false,
+        roster_slot: null,
+        roster_slot_index: null,
+        projected_ppg: displayPpg,
+        projection_floor: availabilityAdjustedQuantile(0.2, availability, activeFloor, activeDisplayPpg, activeCeiling),
+        projection_ceiling: availabilityAdjustedQuantile(0.8, availability, activeFloor, activeDisplayPpg, activeCeiling),
+        last_season_ppg: lastSeasonPpgByPlayerId.get(identity.id) ?? null,
+        player_value: playerValue?.value ?? null,
+        position_rank: playerValue?.positionRank ?? null,
+        overall_rank: playerValue?.overallRank ?? null,
+        value_tier: playerValue?.tier ?? null,
+        confidence: playerValue?.confidence ?? scoredProjection?.confidence ?? null,
+        depth_role: playerValue?.depthRole ?? null,
+        opponent: matchup?.opponent ?? null,
+        is_home: matchup?.isHome ?? null,
+        team_implied_total: matchup?.teamImpliedTotal ?? null,
+        active_game_ppg: activeDisplayPpg,
+        healthy_player_value: playerValue?.healthyValue ?? null,
+        availability_adjustment: playerValue?.availabilityAdjustment ?? null,
+        injury_status: playerValue?.injuryStatus ?? null,
+        injury_status_label: playerValue?.injuryStatusLabel ?? null,
+        injury_timeline: playerValue?.injuryTimeline ?? null,
+        practice_participation: playerValue?.practiceParticipation ?? null,
+        injury_data_stale: playerValue?.injuryDataStale ?? false,
+        current_week_active_probability: playerValue?.currentWeekActiveProbability ?? 1,
+      }];
+    },
+  );
   return {
     rostersByTeam,
     teamSummaries,
@@ -405,6 +479,7 @@ async function hydrateLeagueRosterAnalytics(
     valuesByPlayerId: values,
     generalProfiles: valueContexts?.general.profiles ?? null,
     leagueProfiles: valueContexts?.league?.profiles ?? null,
+    projectionPool,
     analyticsAvailable: Boolean(valueContexts),
   };
 }

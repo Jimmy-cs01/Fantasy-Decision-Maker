@@ -24,6 +24,7 @@ describe("player identifier resolution", () => {
     expect(parsePlayerIdentifier("sleeper:4046")).toEqual({ kind: "sleeper", value: "4046" });
     expect(decodePlayerIdentifier("sleeper%3A4046")).toBe("sleeper:4046");
     expect(parsePlayerIdentifier("sleeper%3A4046")).toEqual({ kind: "sleeper", value: "4046" });
+    expect(parsePlayerIdentifier("sleeper:CLE")).toEqual({ kind: "sleeper", value: "CLE" });
   });
 
   it("queries UUID identifiers by id", async () => {

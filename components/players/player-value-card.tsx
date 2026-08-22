@@ -108,6 +108,11 @@ export function PlayerValueCard({
             {preferred.draftAdjustment.toFixed(1)}
           </span>
         )}
+        {preferred.rookieProtectionAdjustment > 0 && (
+          <span className="text-violet-200">
+            Rookie role protection +{preferred.rookieProtectionAdjustment.toFixed(1)} PPG-equivalent value context
+          </span>
+        )}
         {preferred.depthAdjustment !== 0 && (
           <span>
             Role context {preferred.depthAdjustment > 0 ? "+" : ""}

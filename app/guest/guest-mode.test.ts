@@ -40,6 +40,10 @@ describe("guest mode architecture", () => {
     expect(sidebar).toContain('href === "/trades"');
     expect(sidebar).toContain('href === "/start-sit"');
     expect(sidebar).toContain('href === "/season"');
+    expect(sidebar).toContain('href === "/waivers"');
+    expect(sidebar).toContain('href === "/league-matchups"');
+    expect(workspace).toContain("WaiverWire");
+    expect(workspace).toContain("HeadToHeadSchedule");
   });
 
   it("shows ephemeral account and selected-league context in the shared sidebar", () => {

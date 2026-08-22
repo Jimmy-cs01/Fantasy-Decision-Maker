@@ -1,4 +1,4 @@
-import { ArrowRightLeft, CalendarDays, LayoutDashboard, Link2, ListChecks, ListTree, Trophy, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, CalendarDays, CirclePlus, LayoutDashboard, Link2, ListChecks, ListTree, Trophy, UsersRound, type LucideIcon } from "lucide-react";
 
 export type NavigationItem = {
   href: string;
@@ -10,6 +10,8 @@ export type NavigationItem = {
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/players", label: "Players", icon: UsersRound },
+  { href: "/waivers", label: "Waiver Wire", icon: CirclePlus },
+  { href: "/league-matchups", label: "League Schedule", icon: CalendarDays },
   { href: "/matchups", label: "Matchups", icon: CalendarDays },
   { href: "/start-sit", label: "Start / Sit", icon: ListChecks },
   { href: "/season", label: "Season Outlook", icon: Trophy },

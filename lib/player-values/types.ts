@@ -111,6 +111,7 @@ export interface PlayerValueResult {
   ageAdjustment: number;
   depthAdjustment: number;
   draftAdjustment: number;
+  rookieProtectionAdjustment: number;
   historicalUpsideAdjustment: number;
   historicalWeightedPpg: number | null;
   historicalBestPositionRank: number | null;

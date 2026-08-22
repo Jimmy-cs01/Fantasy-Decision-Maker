@@ -1,12 +1,10 @@
 import { AppShell } from "@/components/dashboard/app-shell";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { privatePageMetadata } from "@/lib/seo/metadata";
 
 export const dynamic = "force-dynamic";
-export const metadata = privatePageMetadata("Season Outlook");
-
-export default async function SeasonLayout({ children }: { children: React.ReactNode }) {
-  if (!isSupabaseConfigured()) return <AppShell guest>{children}</AppShell>;
+export const metadata = privatePageMetadata("League Schedule");
+export default async function LeagueMatchupsLayout({ children }: { children: React.ReactNode }) {
   const db = await createClient();
   const { data: { user } } = await db.auth.getUser();
   return <AppShell guest={!user}>{children}</AppShell>;

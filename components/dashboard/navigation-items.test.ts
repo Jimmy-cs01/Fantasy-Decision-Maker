@@ -10,6 +10,8 @@ describe("application navigation", () => {
     expect(NAVIGATION_ITEMS.map((item) => [item.label, item.href])).toEqual([
       ["Dashboard", "/dashboard"],
       ["Players", "/players"],
+      ["Waiver Wire", "/waivers"],
+      ["League Schedule", "/league-matchups"],
       ["Matchups", "/matchups"],
       ["Start / Sit", "/start-sit"],
       ["Season Outlook", "/season"],
@@ -22,7 +24,7 @@ describe("application navigation", () => {
   it("marks exact and nested routes active without confusing dashboard children", () => {
     const dashboard = NAVIGATION_ITEMS[0];
     const players = NAVIGATION_ITEMS[1];
-    const connect = NAVIGATION_ITEMS[7];
+    const connect = NAVIGATION_ITEMS.find((item) => item.href === "/dashboard/connect")!;
     expect(isNavigationActive("/dashboard", dashboard)).toBe(true);
     expect(isNavigationActive("/dashboard/connect", dashboard)).toBe(false);
     expect(isNavigationActive("/dashboard/connect", connect)).toBe(true);
