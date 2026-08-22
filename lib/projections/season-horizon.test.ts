@@ -37,4 +37,39 @@ describe("17-week projection horizon", () => {
     expect(result.rows[5].projection.projectedPoints).not.toBe(17);
     expect(result.rows[0].projection.activeGameProjectedPoints).toBe(17);
   });
+
+  it("varies a questionable elite RB after a Rams seed matchup and moves its distribution coherently", () => {
+    const rb: ProjectionRecord = {
+      ...projection,
+      player_id: "cmc-style",
+      team: "SF",
+      opponent_team: "LAR",
+      projected_stats: { rush_attempts: 16, rushing_yards: 70, rushing_touchdowns: 0.7, targets: 7, receptions: 5, receiving_yards: 50, receiving_touchdowns: 0.2 },
+      residual_low: -3.2,
+      residual_high: 5.3,
+    };
+    const rbGames = Array.from({ length: 17 }, (_, index) => index + 1).filter((week) => week !== 8).map((week) => ({
+      week,
+      kickoff: `2026-10-${String(Math.min(28, week + 1)).padStart(2, "0")}T17:00:00Z`,
+      home_team: "SF",
+      away_team: week === 1 ? "LAR" : week === 2 ? "MIA" : week === 4 ? "DEN" : "ARI",
+    }));
+    const result = buildSeasonProjectionHorizon({
+      records: [rb],
+      games: rbGames,
+      injury: { player_id: "cmc-style", status: "questionable", source: "sleeper", fetched_at: "2026-08-21T12:00:00Z" },
+      context: { mode: "ppr", position: "RB" },
+      now: new Date("2026-08-21T12:00:00Z"),
+    });
+    const future = result.rows.filter((row) => !row.isBye && !row.isCurrent);
+    const adjustments = future.map((row) => Number(row.projection.diagnostics?.opponentAdjustmentPpg ?? 0));
+    expect(adjustments.some((value) => value > 0)).toBe(true);
+    expect(adjustments.some((value) => value < 0)).toBe(true);
+    expect(new Set(future.map((row) => row.projection.projectedPoints)).size).toBeGreaterThan(1);
+    for (const row of future) {
+      expect(row.projection.median).toBe(row.projection.projectedPoints);
+      expect(row.projection.projectedPoints - row.projection.floor).toBeCloseTo(3.2, 1);
+      expect(row.projection.ceiling - row.projection.projectedPoints).toBeCloseTo(5.3, 1);
+    }
+  });
 });

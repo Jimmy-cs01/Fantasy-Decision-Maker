@@ -20,6 +20,12 @@ DEFAULT_OUTPUT = ROOT / "lib/projections/defense-vs-position-2025.json"
 POSITIONS = ("QB", "RB", "WR", "TE")
 POSITION_CAPS = {"QB": 0.65, "RB": 0.80, "WR": 0.45, "TE": 0.50}
 PRIOR_GAMES = 16.0
+TEAM_ALIASES = {"LA": "LAR", "OAK": "LV", "SD": "LAC", "STL": "LAR"}
+
+
+def normalize_team(value: object) -> str:
+    team = str(value).strip().upper()
+    return TEAM_ALIASES.get(team, team)
 
 
 def season_metrics(frame: pd.DataFrame, season: int) -> pd.DataFrame:
@@ -30,6 +36,7 @@ def season_metrics(frame: pd.DataFrame, season: int) -> pd.DataFrame:
         & frame.opponent_team.notna(),
         ["game_id", "opponent_team", "historical_position", "fantasy_points_ppr"],
     ].copy()
+    rows["opponent_team"] = rows.opponent_team.map(normalize_team)
     per_game = (
         rows.groupby(["game_id", "opponent_team", "historical_position"], as_index=False)
         .fantasy_points_ppr.sum()

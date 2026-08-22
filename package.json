@@ -87,6 +87,7 @@
     "projections:reconcile": "vite-node scripts/reconcile_weekly_projections.ts",
     "projections:audit": "vite-node scripts/audit_projections.ts",
     "projections:consensus:audit": "vite-node scripts/audit_projection_consensus.ts",
+    "projections:opponent:audit": "vite-node scripts/audit_opponent_projection_horizon.ts",
     "projections:defense": "python3 scripts/build_defense_vs_position.py",
     "projections:season:build": "python3 scripts/build_season_projection_horizon.py --season 2026",
     "projections:season:import:dry-run": "python3 scripts/import_player_projections.py --input data/processed/player_projections_v4_1_season.csv --version v4.1 --dry-run",

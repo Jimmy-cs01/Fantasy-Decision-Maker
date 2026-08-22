@@ -1,6 +1,6 @@
 import pandas as pd
 
-from scripts.build_defense_vs_position import build_lookup
+from scripts.build_defense_vs_position import build_lookup, normalize_team
 
 
 def test_defense_lookup_uses_actual_points_allowed_and_explicit_rank_direction():
@@ -23,3 +23,8 @@ def test_defense_lookup_uses_actual_points_allowed_and_explicit_rank_direction()
     assert rb["defenses"]["T00"]["adjustment_ppg"] < 0
     assert rb["defenses"]["T31"]["adjustment_ppg"] > 0
     assert abs(rb["defenses"]["T00"]["adjustment_ppg"]) <= rb["soft_cap_ppg"]
+
+
+def test_rams_team_code_is_canonical_for_application_lookup():
+    assert normalize_team("LA") == "LAR"
+    assert normalize_team("LAR") == "LAR"

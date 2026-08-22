@@ -114,19 +114,19 @@
           "points_allowed_per_game": 15.075294117647058,
           "rank": 13
         },
-        "LA": {
-          "adjustment_ppg": -0.23192015349420714,
-          "games": 17,
-          "normalized_factor": -0.35680023614493406,
-          "points_allowed_per_game": 15.164705882352942,
-          "rank": 14
-        },
         "LAC": {
           "adjustment_ppg": -0.65,
           "games": 17,
           "normalized_factor": -1.0,
           "points_allowed_per_game": 12.578823529411764,
           "rank": 2
+        },
+        "LAR": {
+          "adjustment_ppg": -0.23192015349420714,
+          "games": 17,
+          "normalized_factor": -0.35680023614493406,
+          "points_allowed_per_game": 15.164705882352942,
+          "rank": 14
         },
         "LV": {
           "adjustment_ppg": -0.04412958453250722,
@@ -346,19 +346,19 @@
           "points_allowed_per_game": 19.2,
           "rank": 6
         },
-        "LA": {
-          "adjustment_ppg": -0.38849900990099145,
-          "games": 17,
-          "normalized_factor": -0.4856237623762393,
-          "points_allowed_per_game": 20.158823529411762,
-          "rank": 12
-        },
         "LAC": {
           "adjustment_ppg": -0.7408158415841595,
           "games": 17,
           "normalized_factor": -0.9260198019801993,
           "points_allowed_per_game": 18.523529411764706,
           "rank": 4
+        },
+        "LAR": {
+          "adjustment_ppg": -0.38849900990099145,
+          "games": 17,
+          "normalized_factor": -0.4856237623762393,
+          "points_allowed_per_game": 20.158823529411762,
+          "rank": 12
         },
         "LV": {
           "adjustment_ppg": 0.21221386138613862,
@@ -578,19 +578,19 @@
           "points_allowed_per_game": 11.005882352941176,
           "rank": 8
         },
-        "LA": {
-          "adjustment_ppg": -0.02732404040705674,
-          "games": 17,
-          "normalized_factor": -0.05464808081411348,
-          "points_allowed_per_game": 13.129411764705884,
-          "rank": 16
-        },
         "LAC": {
           "adjustment_ppg": -0.4621553416904964,
           "games": 17,
           "normalized_factor": -0.9243106833809928,
           "points_allowed_per_game": 10.452941176470588,
           "rank": 5
+        },
+        "LAR": {
+          "adjustment_ppg": -0.02732404040705674,
+          "games": 17,
+          "normalized_factor": -0.05464808081411348,
+          "points_allowed_per_game": 13.129411764705884,
+          "rank": 16
         },
         "LV": {
           "adjustment_ppg": -0.5,
@@ -810,19 +810,19 @@
           "points_allowed_per_game": 27.341176470588238,
           "rank": 10
         },
-        "LA": {
-          "adjustment_ppg": 0.0811043489792401,
-          "games": 17,
-          "normalized_factor": 0.18023188662053355,
-          "points_allowed_per_game": 31.705882352941178,
-          "rank": 20
-        },
         "LAC": {
           "adjustment_ppg": -0.2930170927617779,
           "games": 17,
           "normalized_factor": -0.6511490950261731,
           "points_allowed_per_game": 27.418823529411764,
           "rank": 11
+        },
+        "LAR": {
+          "adjustment_ppg": 0.0811043489792401,
+          "games": 17,
+          "normalized_factor": 0.18023188662053355,
+          "points_allowed_per_game": 31.705882352941178,
+          "rank": 20
         },
         "LV": {
           "adjustment_ppg": 0.2381860739692943,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyRelativeOpponentAdjustment, opponentStrength } from "./opponent-adjustment";
 import type { ProjectionRecord } from "./types";
+import { CURRENT_NFL_TEAMS } from "../nfl/teams";
 
 const record: ProjectionRecord = {
   player_id: "p1", season: 2026, week: 1, season_type: "REG", team: "PHI", opponent_team: "DAL",
@@ -14,6 +15,12 @@ describe("opponent defense adjustment", () => {
   it("uses rank 1 for the hardest matchup and rank 32 for the easiest", () => {
     expect(opponentStrength("RB", "DEN")?.rank).toBe(1);
     expect(opponentStrength("RB", "CIN")?.rank).toBe(32);
+  });
+
+  it("covers every current NFL team abbreviation for every fantasy position", () => {
+    for (const position of ["QB", "RB", "WR", "TE"]) {
+      for (const team of CURRENT_NFL_TEAMS) expect(opponentStrength(position, team), `${position} ${team}`).not.toBeNull();
+    }
   });
 
   it("decreases a hard matchup, increases a weak matchup, and keeps the seed matchup unchanged", () => {
@@ -37,5 +44,13 @@ describe("opponent defense adjustment", () => {
     const twice = applyRelativeOpponentAdjustment({ record: once, position: "RB", opponent: "DEN", anchorOpponent: "DAL" });
     expect(twice.projected_points_ppr).toBeCloseTo(once.projected_points_ppr, 8);
     expect(twice.projected_stats).toEqual(once.projected_stats);
+  });
+
+  it("varies an elite RB horizon when the seed opponent is the Rams", () => {
+    const hard = applyRelativeOpponentAdjustment({ record, position: "RB", opponent: "DEN", anchorOpponent: "LAR" });
+    const easy = applyRelativeOpponentAdjustment({ record, position: "RB", opponent: "ARI", anchorOpponent: "LAR" });
+    expect(Number(hard.projection_diagnostics?.opponentAdjustmentPpg)).not.toBe(0);
+    expect(Number(easy.projection_diagnostics?.opponentAdjustmentPpg)).not.toBe(0);
+    expect(hard.projected_points_ppr).not.toBe(easy.projected_points_ppr);
   });
 });

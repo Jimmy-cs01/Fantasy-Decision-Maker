@@ -25,6 +25,7 @@ DEFAULT_SCHEDULE = ROOT / "data/processed/schedules.csv"
 DEFAULT_OUTPUT = ROOT / "data/processed/player_projections_v4_1_season.csv"
 WEEKS = range(1, 18)
 DEFENSE_LOOKUP = ROOT / "lib/projections/defense-vs-position-2025.json"
+DEFENSE_TEAM_ALIASES = {"LA": "LAR", "OAK": "LV", "SD": "LAC", "STL": "LAR"}
 
 
 def load_defense_lookup(path: Path = DEFENSE_LOOKUP) -> dict:
@@ -33,7 +34,8 @@ def load_defense_lookup(path: Path = DEFENSE_LOOKUP) -> dict:
 
 def opponent_adjustment(lookup: dict, position: str, opponent: str | None) -> dict | None:
     position_data = lookup.get("positions", {}).get(str(position).upper())
-    defense = position_data.get("defenses", {}).get(str(opponent)) if position_data and opponent else None
+    normalized_opponent = DEFENSE_TEAM_ALIASES.get(str(opponent).upper(), str(opponent).upper()) if opponent else None
+    defense = position_data.get("defenses", {}).get(normalized_opponent) if position_data and normalized_opponent else None
     if not defense:
         return None
     return {
