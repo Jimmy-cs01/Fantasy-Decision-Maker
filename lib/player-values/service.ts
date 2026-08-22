@@ -17,8 +17,17 @@ import type { InjuryRecord } from "../injuries/types";
 import { expectedGamesRemaining } from "./formula";
 import { getInjuriesByPlayerIds } from "../injuries/service";
 import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
+import { currentProjectionWeek, type ProjectionScheduleGame } from "../projections/season-horizon";
 
 type DatabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+export function resolveProjectionPoolWeek(
+  games: ProjectionScheduleGame[],
+  fallbackWeek: number,
+  now = new Date(),
+) {
+  return games.length ? currentProjectionWeek(games, now) : fallbackWeek;
+}
 
 export async function getLatestProjectionPool(
   db: DatabaseClient,
@@ -35,7 +44,6 @@ export async function getLatestProjectionPool(
     .eq("season_type", "REG")
     .eq(ACTIVE_MODEL_RELATION_FILTER, true)
     .order("season", { ascending: false })
-    .order("week", { ascending: false })
     .order("generated_at", { ascending: false })
     .limit(1);
   if (signal) latestQuery = latestQuery.abortSignal(signal);
@@ -45,6 +53,20 @@ export async function getLatestProjectionPool(
       `Unable to resolve current projection week: ${latestError.message}`,
     );
   if (!latest) return null;
+  let scheduleQuery = db
+    .from("nfl_games")
+    .select("week,kickoff,home_team,away_team")
+    .eq("season", latest.season)
+    .eq("season_type", "REG")
+    .order("week", { ascending: true });
+  if (signal) scheduleQuery = scheduleQuery.abortSignal(signal);
+  const { data: schedule, error: scheduleError } = await scheduleQuery;
+  if (scheduleError)
+    throw new Error(`Unable to resolve current projection schedule: ${scheduleError.message}`);
+  const projectionWeek = resolveProjectionPoolWeek(
+    (schedule ?? []) as ProjectionScheduleGame[],
+    Number(latest.week),
+  );
   const records: ValueProjectionRecord[] = [];
   for (let start = 0; ; start += 1000) {
     let recordsQuery = db
@@ -53,7 +75,7 @@ export async function getLatestProjectionPool(
         "player_id,season,week,projected_stats,model_projection_ppr,final_projection_ppr,projection_diagnostics,residual_low,residual_high,confidence,players(id,full_name,position,sleeper_position,historical_position,team,headshot_url,sleeper_player_id,birth_date,rookie_season,draft_year,draft_round,draft_pick,draft_status)",
       )
       .eq("season", latest.season)
-      .eq("week", latest.week)
+      .eq("week", projectionWeek)
       .eq("season_type", "REG")
       .eq("model_version_id", latest.model_version_id)
       .range(start, start + 999);
@@ -67,7 +89,7 @@ export async function getLatestProjectionPool(
   return {
     records,
     season: Number(latest.season),
-    week: Number(latest.week),
+    week: projectionWeek,
     modelVersionId: latest.model_version_id,
   };
 }
