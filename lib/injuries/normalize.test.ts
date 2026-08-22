@@ -9,10 +9,10 @@ describe("Sleeper injury normalization", () => {
     expect(normalizeInjuryStatus("DNR", "Active")).toBe("healthy");
   });
 
-  it("marks reserve-list duration as estimated rather than reported", () => {
+  it("keeps reserve-list return timing unknown instead of presenting a fallback as medical data", () => {
     const result = normalizeSleeperInjury("p1", { player_id: "s1", injury_status: "IR", status: "Injured Reserve" }, "2026-09-01T00:00:00Z");
-    expect(result.timeline_type).toBe("estimated");
-    expect(result.timeline_confidence).toBe("low");
-    expect(result.expected_games_missed).toBe(4);
+    expect(result.timeline_type).toBe("unknown");
+    expect(result.timeline_confidence).toBeNull();
+    expect(result.expected_games_missed).toBeNull();
   });
 });

@@ -8,6 +8,9 @@ import type { PlayerSeasonRow } from "@/lib/players/types";
 
 const weekly = (week: number, points: number): WeeklyProjectionView => ({
   isHome: week === 1,
+  isBye: false,
+  isForecast: week > 1,
+  isCurrent: week === 2,
   kickoff: `2026-09-${String(week + 1).padStart(2, "0")}T17:00:00Z`,
   projection: {
     playerId: "p1", season: 2026, week, seasonType: "REG", team: "MIN", opponent: week === 1 ? "GB" : "CHI",
@@ -24,7 +27,7 @@ describe("player profile sections", () => {
     expect(html.indexOf(">1<")).toBeLessThan(html.indexOf(">2<"));
     expect(html).toContain("CURRENT");
     expect(html).toContain("12.4");
-    expect(html).not.toContain("Week 3");
+    expect(html).toContain("ROLE FORECAST");
   });
 
   it("renders offense teammates as links and highlights the current player", () => {

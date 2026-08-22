@@ -1,4 +1,5 @@
 import type { InjuryAvailability, InjuryRecord, InjuryStatus } from "./types";
+import { projectionAbsencePolicy, unavailableForProjectionWeek } from "./policy";
 
 export const INJURY_FRESHNESS_HOURS = 36;
 
@@ -46,14 +47,15 @@ export function activeProbability(record: InjuryRecord | null | undefined, now =
 
 export function availabilityTimeline(record: InjuryRecord | null | undefined) {
   if (!record) return "No injury designation";
-  if (record.expected_return_date) return `Expected return ${record.expected_return_date}`;
+  if (record.expected_return_date) return `${record.timeline_type === "reported" ? "Reported" : "Estimated"} return ${record.expected_return_date}`;
   const min = record.return_timeline_min_weeks;
   const max = record.return_timeline_max_weeks;
   if (min != null && max != null) return `Estimated to miss ${min}–${max} weeks`;
-  if (record.expected_games_missed != null) {
+  if (record.expected_games_missed != null && !record.timeline_source?.includes("designation start date unavailable")) {
     if (record.expected_games_missed <= 1) return record.timeline_type === "reported" ? "Reported out this week" : "Estimated to miss about 1 game";
     return `Estimated to miss about ${record.expected_games_missed} games`;
   }
+  if (record.status === "out" || record.status === "inactive") return "Reported out this week";
   return "Return timetable unknown";
 }
 
@@ -67,9 +69,9 @@ export function calculateAvailability(
   const updatedAt = record?.source_updated_at ?? record?.fetched_at ?? now.toISOString();
   const updated = new Date(updatedAt);
   const isStale = Boolean(record) && (!Number.isFinite(updated.valueOf()) || now.valueOf() - updated.valueOf() > INJURY_FRESHNESS_HOURS * 3_600_000);
-  const explicitMissed = Number(record?.expected_games_missed ?? 0);
+  const absence = projectionAbsencePolicy(record);
   const currentWeekMiss = 1 - probability;
-  const expectedGamesMissed = isStale ? 0 : clamp(Math.max(explicitMissed, currentWeekMiss), 0, gamesRemaining);
+  const expectedGamesMissed = isStale ? 0 : clamp(Math.max(absence.weeks, currentWeekMiss), 0, gamesRemaining);
   return {
     status: record?.status ?? "healthy",
     statusLabel: statusLabel(record?.status ?? "healthy"),
@@ -85,6 +87,29 @@ export function calculateAvailability(
     timelineConfidence: record?.timeline_confidence ?? null,
     timelineLabel: availabilityTimeline(record),
     expectedReturnDate: record?.expected_return_date ?? null,
+    projectionAssumption: isStale ? null : absence.label,
+    projectionAssumptionBasis: isStale ? "none" : absence.basis,
+  };
+}
+
+export function calculateWeeklyAvailability(
+  record: InjuryRecord | null | undefined,
+  targetWeek: number,
+  currentWeek: number,
+  gamesRemaining: number,
+  now = new Date(),
+  kickoff?: string | null,
+) {
+  const result = calculateAvailability(record, gamesRemaining, now, kickoff);
+  if (result.isStale) return result;
+  if (!unavailableForProjectionWeek(record, targetWeek, currentWeek, kickoff)) {
+    if (targetWeek <= currentWeek) return result;
+    return { ...result, currentWeekActiveProbability: 1 };
+  }
+  return {
+    ...result,
+    currentWeekActiveProbability: 0,
+    expectedActiveGamesRemaining: Math.max(0, gamesRemaining - projectionAbsencePolicy(record).weeks),
   };
 }
 

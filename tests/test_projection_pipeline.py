@@ -9,7 +9,7 @@ import pandas as pd
 
 from scripts import import_player_projections as projection_importer
 from scripts.generate_weekly_projections import resolve_schedule
-from scripts.import_player_projections import build_rows
+from scripts.import_player_projections import build_rows, manifest_path_for_version
 from scripts.projection_pipeline import config
 from scripts.projection_pipeline.features import (
     build_inference_dataset,
@@ -170,6 +170,15 @@ class ProjectionScoringAndPersistenceTests(unittest.TestCase):
                 projection_importer.load_local_environment()
                 self.assertEqual(os.environ["NEXT_PUBLIC_SUPABASE_URL"], "https://example.supabase.co")
                 self.assertEqual(os.environ["SUPABASE_SERVICE_ROLE_KEY"], "shell-key")
+
+    def test_projection_importer_resolves_dotted_model_version_artifact_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact_root = Path(directory)
+            expected = artifact_root / "v4_1" / "manifest.json"
+            expected.parent.mkdir()
+            expected.write_text("{}")
+            with mock.patch.object(projection_importer, "ARTIFACT_ROOT", artifact_root):
+                self.assertEqual(manifest_path_for_version("v4.1"), expected)
 
     def test_model_inference_uses_canonical_features_and_clamps_negative_counts(self):
         class FakeModel:

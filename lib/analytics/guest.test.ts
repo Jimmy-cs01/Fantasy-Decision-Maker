@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOrCreateAnonymousId, validAnonymousId } from "./guest";
+import { anonymousVisitorType, getOrCreateAnonymousId, shouldRecordAnalyticsEvent, validAnonymousId } from "./guest";
 
 describe("guest analytics identity", () => {
   it("reuses a valid browser ID across refreshes", () => {
@@ -13,5 +13,19 @@ describe("guest analytics identity", () => {
   it("rejects malformed identifiers", () => {
     expect(validAnonymousId("guest-one")).toBe(false);
     expect(validAnonymousId("123e4567-e89b-42d3-a456-426614174000")).toBe(true);
+  });
+
+  it("distinguishes Guest Mode from ordinary anonymous browsing", () => {
+    expect(anonymousVisitorType("/guest")).toBe("guest");
+    expect(anonymousVisitorType("/guest/league/123")).toBe("guest");
+    expect(anonymousVisitorType("/players")).toBe("anonymous");
+  });
+
+  it("deduplicates immediate duplicate route events without suppressing later activity", () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) };
+    expect(shouldRecordAnalyticsEvent(storage, "/players", 1_000)).toBe(true);
+    expect(shouldRecordAnalyticsEvent(storage, "/players", 2_000)).toBe(false);
+    expect(shouldRecordAnalyticsEvent(storage, "/players", 7_000)).toBe(true);
   });
 });

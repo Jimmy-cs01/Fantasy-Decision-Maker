@@ -137,6 +137,15 @@ def validate_export_json(frame: pd.DataFrame) -> None:
             )
 
 
+def manifest_path_for_version(version: str) -> Path:
+    """Resolve display versions (v4.1) to the repository's artifact convention (v4_1)."""
+    exact = ARTIFACT_ROOT / version / "manifest.json"
+    if exact.exists():
+        return exact
+    normalized = ARTIFACT_ROOT / version.replace(".", "_") / "manifest.json"
+    return normalized
+
+
 def build_rows(frame: pd.DataFrame, player_ids: dict[str, str], model_version_id: str) -> list[dict]:
     rows = []
     for record in frame.to_dict("records"):
@@ -168,7 +177,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     frame = pd.read_csv(args.input, dtype={"gsis_id": "string"})
-    manifest = json.loads((ARTIFACT_ROOT / args.version / "manifest.json").read_text())
+    manifest = json.loads(manifest_path_for_version(args.version).read_text())
     exported_versions = set(frame.get("model_version", pd.Series(dtype="string")).dropna().astype(str))
     if exported_versions and exported_versions != {args.version}:
         raise ValueError(f"Projection export model versions {sorted(exported_versions)} do not match {args.version}")

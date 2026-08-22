@@ -7,7 +7,7 @@ import { getInjuriesByPlayerIds } from "../injuries/service";
 import { calculateAvailability } from "../injuries/availability";
 import { expectedGamesRemaining } from "../player-values/formula";
 import { getWeeklyMatchups, matchupContextByTeam } from "../nfl/schedule-service";
-import { normalizeNflTeam } from "../nfl/teams";
+import { buildSeasonProjectionHorizon } from "./season-horizon";
 
 const projectionSelect = "player_id,season,week,season_type,team,opponent_team,projected_stats,model_projection_ppr,opportunity_adjusted_ppr,vegas_projection_ppr,sleeper_projection_ppr,final_projection_ppr,blend_weight_model,vegas_confidence,opportunity_confidence,sanity_adjustment,outlier_classification,projection_diagnostics,projected_points_standard,projected_points_half_ppr,projected_points_ppr,residual_low,residual_high,confidence,drivers,generated_at,model_versions!inner(version,is_active)";
 
@@ -67,6 +67,9 @@ export interface WeeklyProjectionView {
   projection: ReturnType<typeof normalizeProjection>;
   isHome: boolean | null;
   kickoff: string | null;
+  isBye: boolean;
+  isForecast: boolean;
+  isCurrent: boolean;
 }
 
 export async function getPlayerProjectionSeries(
@@ -102,20 +105,14 @@ export async function getPlayerProjectionSeries(
     const record = row as unknown as ProjectionRecord;
     if (!latestByWeek.has(Number(record.week))) latestByWeek.set(Number(record.week), record);
   }
-  return [...latestByWeek.values()].sort((left, right) => left.week - right.week).map((record) => {
-    const team = normalizeNflTeam(record.team ?? "");
-    const game = (games ?? []).find((candidate) => Number(candidate.week) === Number(record.week) && [candidate.home_team, candidate.away_team].map((item) => normalizeNflTeam(item)).includes(team));
-    const availability = calculateAvailability(injuries.get(playerId), expectedGamesRemaining(record.week), new Date(), game?.kickoff);
-    const isHome = game && record.team ? game.home_team === record.team : null;
-    return {
-      projection: normalizeProjection(record, {
-        mode: mode === "league" && !settings ? "ppr" : mode,
-        settings,
-        position: player?.sleeper_position ?? player?.historical_position,
-        availability,
-      }),
-      isHome,
-      kickoff: game?.kickoff ?? null,
-    };
-  });
+  return buildSeasonProjectionHorizon({
+    records: [...latestByWeek.values()],
+    games: games ?? [],
+    injury: injuries.get(playerId),
+    context: {
+      mode: mode === "league" && !settings ? "ppr" : mode,
+      settings,
+      position: player?.sleeper_position ?? player?.historical_position,
+    },
+  }).rows;
 }

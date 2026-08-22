@@ -86,6 +86,8 @@
     "model:snap-first:report": "python3 scripts/report_model_snap_first.py",
     "projections:reconcile": "vite-node scripts/reconcile_weekly_projections.ts",
     "projections:audit": "vite-node scripts/audit_projections.ts",
+    "projections:season:build": "python3 scripts/build_season_projection_horizon.py --season 2026",
+    "projections:season:import:dry-run": "python3 scripts/import_player_projections.py --input data/processed/player_projections_v4_1_season.csv --version v4.1 --dry-run",
     "value:calibrate": "python3 scripts/calibrate_player_values.py",
     "value:archetypes": "vite-node scripts/report_player_value_archetypes.ts",
     "value:history-report": "vite-node scripts/report_historical_value_changes.ts",

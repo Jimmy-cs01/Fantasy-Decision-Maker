@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { activeProbability, availabilityAdjustedPpg, availabilityAdjustedQuantile, calculateAvailability } from "./availability";
+import { activeProbability, availabilityAdjustedPpg, availabilityAdjustedQuantile, calculateAvailability, calculateWeeklyAvailability } from "./availability";
+import { projectionAbsencePolicy } from "./policy";
 import type { InjuryRecord } from "./types";
 
 const now = new Date("2026-09-01T12:00:00Z");
@@ -47,6 +48,26 @@ describe("canonical injury availability", () => {
   it("materially reduces an eight-week absence and season-ending absence", () => {
     expect(calculateAvailability(injury("ir", { expected_games_missed: 8 }), 14, now).expectedActiveGamesRemaining).toBe(6);
     expect(calculateAvailability(injury("ir", { expected_games_missed: 20 }), 14, now).expectedActiveGamesRemaining).toBe(0);
+  });
+
+  it("centralizes projection-only fallback weeks without presenting them as reported timetables", () => {
+    expect(projectionAbsencePolicy(injury("questionable"))).toMatchObject({ weeks: 0, basis: "none" });
+    expect(projectionAbsencePolicy(injury("out"))).toMatchObject({ weeks: 1, basis: "jimmygm_fallback" });
+    expect(projectionAbsencePolicy(injury("pup"))).toMatchObject({ weeks: 4, basis: "jimmygm_fallback" });
+    expect(projectionAbsencePolicy(injury("ir"))).toMatchObject({ weeks: 4, basis: "jimmygm_fallback" });
+    const reserve = calculateAvailability(injury("ir"), 14, now);
+    expect(reserve.timelineLabel).toBe("Return timetable unknown");
+    expect(reserve.projectionAssumption).toBe("JimmyGM projection assumption: 4 weeks");
+  });
+
+  it("applies fallback absences by week and lets a reliable reported return override them", () => {
+    expect(calculateWeeklyAvailability(injury("out"), 1, 1, 17, now).currentWeekActiveProbability).toBe(0);
+    expect(calculateWeeklyAvailability(injury("out"), 2, 1, 16, now).currentWeekActiveProbability).toBe(1);
+    expect(calculateWeeklyAvailability(injury("pup"), 4, 1, 14, now).currentWeekActiveProbability).toBe(0);
+    expect(calculateWeeklyAvailability(injury("pup"), 5, 1, 13, now).currentWeekActiveProbability).toBe(1);
+    const reported = injury("out", { expected_return_date: "2026-09-20", expected_games_missed: 2, timeline_type: "reported" });
+    expect(calculateWeeklyAvailability(reported, 2, 1, 16, now, "2026-09-15T17:00:00Z").currentWeekActiveProbability).toBe(0);
+    expect(calculateWeeklyAvailability(reported, 3, 1, 15, now, "2026-09-22T17:00:00Z").currentWeekActiveProbability).toBe(1);
   });
 
   it("does not silently penalize stale injury data", () => {

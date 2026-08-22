@@ -52,7 +52,10 @@ export default async function PlayerDetailPage({ params, searchParams }: { param
   else console.error("Unable to load player projection", projectionResult.reason);
   if (valueResult.status === "fulfilled") playerValue = valueResult.value;
   else console.error("Unable to load Player Value", valueResult.reason);
-  const projection = projectionSeries.at(-1)?.projection ?? null;
+  const currentProjectionRow = projectionSeries.find((row) => row.isCurrent)
+    ?? projectionSeries.find((row) => !row.isBye)
+    ?? null;
+  const projection = currentProjectionRow?.projection ?? null;
   let matchup: MatchupContext | null = null;
   if (projection?.team) {
     try {

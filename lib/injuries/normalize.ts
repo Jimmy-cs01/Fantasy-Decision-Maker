@@ -26,9 +26,6 @@ export function normalizeSleeperInjury(
   fetchedAt = new Date().toISOString(),
 ): InjuryRecord {
   const status = normalizeInjuryStatus(player.injury_status, player.status);
-  const structural = ["ir", "pup", "nfi"].includes(status)
-    && !String(player.status ?? "").toLowerCase().includes("active");
-  const expectedGamesMissed = structural ? 4 : status === "out" || status === "inactive" || status === "suspended" ? 1 : null;
   return {
     player_id: playerId,
     team: text(player.team),
@@ -40,13 +37,13 @@ export function normalizeSleeperInjury(
     injury_body_part: text(player.injury_body_part),
     injury_notes: text(player.injury_notes),
     expected_return_date: null,
-    expected_games_missed: expectedGamesMissed,
-    expected_weeks_missed: structural ? 4 : null,
-    return_timeline_min_weeks: structural ? 4 : null,
+    expected_games_missed: null,
+    expected_weeks_missed: null,
+    return_timeline_min_weeks: null,
     return_timeline_max_weeks: null,
-    timeline_confidence: structural ? "low" : expectedGamesMissed === 1 ? "high" : null,
-    timeline_source: structural ? "NFL reserve-list minimum; designation start date unavailable" : status === "out" ? "Sleeper game designation" : null,
-    timeline_type: expectedGamesMissed == null ? "unknown" : status === "out" ? "reported" : "estimated",
+    timeline_confidence: status === "out" ? "high" : null,
+    timeline_source: status === "out" ? "Sleeper game designation" : null,
+    timeline_type: status === "out" ? "reported" : "unknown",
     source: "sleeper",
     source_updated_at: null,
     fetched_at: fetchedAt,

@@ -52,4 +52,6 @@ export interface InjuryAvailability {
   timelineConfidence: TimelineConfidence | null;
   timelineLabel: string;
   expectedReturnDate: string | null;
+  projectionAssumption: string | null;
+  projectionAssumptionBasis: "reported" | "estimated" | "jimmygm_fallback" | "none";
 }

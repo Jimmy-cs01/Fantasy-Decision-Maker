@@ -3,16 +3,17 @@ import { describe, expect, it } from "vitest";
 
 const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
-describe("admin registered-user analytics page", () => {
+describe("admin user analytics page", () => {
   it("requires explicit admin authorization before loading privileged analytics", () => {
     expect(page).toContain("if (!isAdminIdentity(user)) notFound()");
-    expect(page.indexOf("notFound()")).toBeLessThan(page.indexOf("getRegisteredAnalytics()"));
+    expect(page.indexOf("notFound()")).toBeLessThan(page.indexOf("getRegisteredAnalytics(now)"));
   });
 
-  it("labels the main dashboard as registered-only and does not render guest identifiers", () => {
-    expect(page).toContain("Registered user analytics");
-    expect(page).toContain("Guest analytics remain stored separately");
+  it("distinguishes registered, Guest Mode, and anonymous visitors without exposing raw IDs", () => {
+    expect(page).toContain("User analytics");
+    expect(page).toContain("Guest Mode Visitors");
+    expect(page).toContain("Anonymous Visitors");
+    expect(page).toContain("Eastern Time (ET)");
     expect(page).not.toContain("anonymous_id");
-    expect(page).not.toContain("Recent guest activity");
   });
 });
