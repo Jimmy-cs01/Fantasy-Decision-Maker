@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { featureForPath, normalizedAuthenticatedPath } from "@/lib/analytics/features";
+import { normalizedAnonymousPath } from "@/lib/analytics/guest";
 import { recordAnonymousActivity } from "@/lib/analytics/record-anonymous";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
   const error = await recordAnonymousActivity({
     anonymousId: parsed.data.anonymousId,
     sessionId: parsed.data.sessionId,
-    path: parsed.data.path,
+    path: normalizedAnonymousPath(parsed.data.path),
     visitorType: parsed.data.visitorType,
   });
   if (error) {

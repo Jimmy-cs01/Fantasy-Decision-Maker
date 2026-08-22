@@ -20,6 +20,13 @@ export function anonymousVisitorType(pathname: string): AnonymousVisitorType {
   return pathname === "/guest" || pathname.startsWith("/guest/") ? "guest" : "anonymous";
 }
 
+export function normalizedAnonymousPath(pathname: string) {
+  if (pathname.startsWith("/guest/league/")) return "/guest/league/[leagueId]";
+  if (pathname.startsWith("/dashboard/league/")) return "/dashboard/league/[leagueId]";
+  if (pathname.startsWith("/players/")) return "/players/[playerId]";
+  return pathname;
+}
+
 export function shouldRecordAnalyticsEvent(
   storage: Pick<Storage, "getItem" | "setItem">,
   pathname: string,

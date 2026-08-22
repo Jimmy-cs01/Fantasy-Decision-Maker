@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anonymousVisitorType, getOrCreateAnonymousId, shouldRecordAnalyticsEvent, validAnonymousId } from "./guest";
+import { anonymousVisitorType, getOrCreateAnonymousId, normalizedAnonymousPath, shouldRecordAnalyticsEvent, validAnonymousId } from "./guest";
 
 describe("guest analytics identity", () => {
   it("reuses a valid browser ID across refreshes", () => {
@@ -19,6 +19,13 @@ describe("guest analytics identity", () => {
     expect(anonymousVisitorType("/guest")).toBe("guest");
     expect(anonymousVisitorType("/guest/league/123")).toBe("guest");
     expect(anonymousVisitorType("/players")).toBe("anonymous");
+  });
+
+  it("removes player and league identifiers from stored analytics paths", () => {
+    expect(normalizedAnonymousPath("/guest/league/123456789")).toBe("/guest/league/[leagueId]");
+    expect(normalizedAnonymousPath("/dashboard/league/private-id/roster")).toBe("/dashboard/league/[leagueId]");
+    expect(normalizedAnonymousPath("/players/player-uuid")).toBe("/players/[playerId]");
+    expect(normalizedAnonymousPath("/matchups")).toBe("/matchups");
   });
 
   it("deduplicates immediate duplicate route events without suppressing later activity", () => {

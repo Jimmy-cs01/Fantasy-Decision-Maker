@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordAnonymousActivity } from "@/lib/analytics/record-anonymous";
+import { normalizedAnonymousPath } from "@/lib/analytics/guest";
 import { createClient } from "@/lib/supabase/server";
 
 const payload = z.object({
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const error = await recordAnonymousActivity({
     anonymousId: parsed.data.anonymousId,
     sessionId: parsed.data.sessionId,
-    path: parsed.data.path ?? null,
+    path: parsed.data.path ? normalizedAnonymousPath(parsed.data.path) : null,
     visitorType: parsed.data.visitorType,
   });
   if (error) {
