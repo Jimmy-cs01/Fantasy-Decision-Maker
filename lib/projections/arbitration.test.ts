@@ -179,4 +179,22 @@ describe("projection arbitration", () => {
     expect(extreme.weight).toBeGreaterThan(close.weight);
     expect(extreme.corroboratingSignals).toBe(2);
   });
+
+  it("keeps a Saquon-like small consensus disagreement near the model without overshoot", () => {
+    const result = arbitrateProjection({
+      arbitrationVersion: "v4.1",
+      position: "RB",
+      rawStats: { rush_attempts: 18, rushing_yards: 70, rushing_touchdowns: 0.5, targets: 4, receptions: 3, receiving_yards: 29, receiving_touchdowns: 0.1 },
+      modelPpr: 16.5,
+      currentTeam: "PHI",
+      depth: { depthRank: 1, isStarter: true },
+      historicalGames: 62,
+      sleeperPpr: 16.9,
+      modelConfidence: "high",
+      now,
+    });
+    expect(result.diagnostics.sleeperWeight).toBe(0);
+    expect(result.finalPpr).toBeCloseTo(result.diagnostics.preSleeperPpr ?? 0, 6);
+    expect(result.finalPpr).toBeLessThanOrEqual(16.9);
+  });
 });

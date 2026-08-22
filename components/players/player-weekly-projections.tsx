@@ -3,6 +3,11 @@ import type { WeeklyProjectionView } from "../../lib/projections/service";
 
 const points = (value: number) => value.toFixed(1);
 
+function matchupAdjustment(diagnostics: Record<string, unknown> | null) {
+  const value = Number(diagnostics?.opponentAdjustmentPpg);
+  return Number.isFinite(value) ? value : 0;
+}
+
 export function PlayerWeeklyProjections({ rows, currentWeek }: { rows: WeeklyProjectionView[]; currentWeek?: number }) {
   if (!rows.length) return <Card className="mt-6"><h2 className="text-xl font-black">Season projection</h2><p className="mt-2 text-sm text-slate-400">No weekly projections have been generated for this player yet.</p></Card>;
   const values = rows.map((row) => row.projection.projectedPoints);
@@ -32,7 +37,7 @@ export function PlayerWeeklyProjections({ rows, currentWeek }: { rows: WeeklyPro
         <thead className="bg-slate-950/80 text-left text-[10px] font-black tracking-wider text-slate-500 uppercase"><tr>{["Week", "Matchup", "Kickoff", "Projected", "Floor", "Median", "Ceiling", "Confidence"].map((label) => <th key={label} className="px-3 py-2.5">{label}</th>)}</tr></thead>
         <tbody className="divide-y divide-slate-800">{rows.map(({ projection, isHome, kickoff, isBye, isForecast, isCurrent }) => <tr key={projection.week} className={isCurrent ? "bg-cyan-400/[0.07]" : ""}>
           <td className="px-3 py-3 font-black text-cyan-200">{projection.week}{projection.week === currentWeek ? <span className="ml-2 text-[9px] text-cyan-400">CURRENT</span> : null}</td>
-          <td className="px-3 py-3 font-semibold">{isBye ? <span className="font-black text-amber-300">BYE</span> : projection.opponent ? `${isHome === false ? "@" : "vs"} ${projection.opponent}` : "—"}{isForecast && !isBye ? <span className="ml-2 text-[9px] font-black text-slate-600">ROLE FORECAST</span> : null}</td>
+          <td className="px-3 py-3 font-semibold">{isBye ? <span className="font-black text-amber-300">BYE</span> : projection.opponent ? `${isHome === false ? "@" : "vs"} ${projection.opponent}` : "—"}{!isBye && Math.abs(matchupAdjustment(projection.diagnostics)) >= 0.05 ? <span className={matchupAdjustment(projection.diagnostics) > 0 ? "ml-2 text-[9px] font-black text-emerald-300" : "ml-2 text-[9px] font-black text-amber-300"}>{matchupAdjustment(projection.diagnostics) > 0 ? "+" : ""}{matchupAdjustment(projection.diagnostics).toFixed(1)} matchup</span> : null}{isForecast && !isBye ? <span className="ml-2 text-[9px] font-black text-slate-600">ROLE FORECAST</span> : null}</td>
           <td className="px-3 py-3 text-slate-400">{kickoff ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(kickoff)) : "—"}</td>
           <td className="px-3 py-3 font-black text-white">{points(projection.projectedPoints)}{!isBye && projection.availability?.currentWeekActiveProbability === 0 ? <span className="ml-2 text-[9px] text-rose-300">UNAVAILABLE</span> : null}</td>
           <td className="px-3 py-3">{points(projection.floor)}</td><td className="px-3 py-3">{points(projection.median)}</td><td className="px-3 py-3">{points(projection.ceiling)}</td>

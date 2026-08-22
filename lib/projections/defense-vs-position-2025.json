@@ -1,0 +1,935 @@
+{
+  "positions": {
+    "QB": {
+      "defenses": {
+        "ARI": {
+          "adjustment_ppg": 0.13286842299461224,
+          "games": 17,
+          "normalized_factor": 0.2044129584532496,
+          "points_allowed_per_game": 16.954117647058823,
+          "rank": 19
+        },
+        "ATL": {
+          "adjustment_ppg": 0.0033576857796470995,
+          "games": 17,
+          "normalized_factor": 0.005165670430226307,
+          "points_allowed_per_game": 16.318823529411766,
+          "rank": 17
+        },
+        "BAL": {
+          "adjustment_ppg": 0.28636263006420126,
+          "games": 17,
+          "normalized_factor": 0.4405578924064635,
+          "points_allowed_per_game": 17.70705882352941,
+          "rank": 21
+        },
+        "BUF": {
+          "adjustment_ppg": -0.65,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 13.091764705882353,
+          "rank": 4
+        },
+        "CAR": {
+          "adjustment_ppg": -0.5067707180281898,
+          "games": 17,
+          "normalized_factor": -0.7796472585049075,
+          "points_allowed_per_game": 13.816470588235294,
+          "rank": 6
+        },
+        "CHI": {
+          "adjustment_ppg": 0.37342262563648415,
+          "games": 17,
+          "normalized_factor": 0.5744963471330525,
+          "points_allowed_per_game": 18.134117647058826,
+          "rank": 22
+        },
+        "CIN": {
+          "adjustment_ppg": 0.43170245738321783,
+          "games": 17,
+          "normalized_factor": 0.664157626743412,
+          "points_allowed_per_game": 18.419999999999998,
+          "rank": 26
+        },
+        "CLE": {
+          "adjustment_ppg": -0.6094199690059776,
+          "games": 17,
+          "normalized_factor": -0.9375691830861194,
+          "points_allowed_per_game": 13.312941176470588,
+          "rank": 5
+        },
+        "DAL": {
+          "adjustment_ppg": 0.65,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 23.331764705882353,
+          "rank": 32
+        },
+        "DEN": {
+          "adjustment_ppg": -0.4293041103977567,
+          "games": 17,
+          "normalized_factor": -0.6604678621503949,
+          "points_allowed_per_game": 14.196470588235295,
+          "rank": 9
+        },
+        "DET": {
+          "adjustment_ppg": 0.39236956682163604,
+          "games": 17,
+          "normalized_factor": 0.6036454874179016,
+          "points_allowed_per_game": 18.22705882352941,
+          "rank": 24
+        },
+        "GB": {
+          "adjustment_ppg": -0.26261899490812485,
+          "games": 17,
+          "normalized_factor": -0.4040292229355767,
+          "points_allowed_per_game": 15.014117647058825,
+          "rank": 12
+        },
+        "HOU": {
+          "adjustment_ppg": -0.65,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 12.81764705882353,
+          "rank": 3
+        },
+        "IND": {
+          "adjustment_ppg": 0.1215961921629394,
+          "games": 17,
+          "normalized_factor": 0.18707106486606062,
+          "points_allowed_per_game": 16.898823529411764,
+          "rank": 18
+        },
+        "JAX": {
+          "adjustment_ppg": -0.090177846653384,
+          "games": 17,
+          "normalized_factor": -0.13873514869751385,
+          "points_allowed_per_game": 15.86,
+          "rank": 15
+        },
+        "KC": {
+          "adjustment_ppg": -0.2501475905837212,
+          "games": 17,
+          "normalized_factor": -0.3848424470518788,
+          "points_allowed_per_game": 15.075294117647058,
+          "rank": 13
+        },
+        "LA": {
+          "adjustment_ppg": -0.23192015349420714,
+          "games": 17,
+          "normalized_factor": -0.35680023614493406,
+          "points_allowed_per_game": 15.164705882352942,
+          "rank": 14
+        },
+        "LAC": {
+          "adjustment_ppg": -0.65,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 12.578823529411764,
+          "rank": 2
+        },
+        "LV": {
+          "adjustment_ppg": -0.04412958453250722,
+          "games": 17,
+          "normalized_factor": -0.06789166851154957,
+          "points_allowed_per_game": 16.085882352941177,
+          "rank": 16
+        },
+        "MIA": {
+          "adjustment_ppg": 0.37845915430595417,
+          "games": 17,
+          "normalized_factor": 0.582244852778391,
+          "points_allowed_per_game": 18.158823529411762,
+          "rank": 23
+        },
+        "MIN": {
+          "adjustment_ppg": -0.65,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 11.12,
+          "rank": 1
+        },
+        "NE": {
+          "adjustment_ppg": -0.3259353553243306,
+          "games": 17,
+          "normalized_factor": -0.5014390081912778,
+          "points_allowed_per_game": 14.703529411764706,
+          "rank": 11
+        },
+        "NO": {
+          "adjustment_ppg": -0.46887683565788524,
+          "games": 17,
+          "normalized_factor": -0.721348977935208,
+          "points_allowed_per_game": 14.00235294117647,
+          "rank": 8
+        },
+        "NYG": {
+          "adjustment_ppg": 0.3971662607925607,
+          "games": 17,
+          "normalized_factor": 0.6110250166039395,
+          "points_allowed_per_game": 18.250588235294117,
+          "rank": 25
+        },
+        "NYJ": {
+          "adjustment_ppg": 0.65,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 19.949411764705882,
+          "rank": 31
+        },
+        "PHI": {
+          "adjustment_ppg": -0.36095122131208063,
+          "games": 17,
+          "normalized_factor": -0.5553095712493548,
+          "points_allowed_per_game": 14.531764705882352,
+          "rank": 10
+        },
+        "PIT": {
+          "adjustment_ppg": 0.5077300568223739,
+          "games": 17,
+          "normalized_factor": 0.7811231643421137,
+          "points_allowed_per_game": 18.79294117647059,
+          "rank": 27
+        },
+        "SEA": {
+          "adjustment_ppg": -0.46983617445207,
+          "games": 17,
+          "normalized_factor": -0.7228248837724154,
+          "points_allowed_per_game": 13.99764705882353,
+          "rank": 7
+        },
+        "SF": {
+          "adjustment_ppg": 0.16380709910707636,
+          "games": 17,
+          "normalized_factor": 0.2520109217031944,
+          "points_allowed_per_game": 17.105882352941176,
+          "rank": 20
+        },
+        "TB": {
+          "adjustment_ppg": 0.6420374880082644,
+          "games": 17,
+          "normalized_factor": 0.987749981551176,
+          "points_allowed_per_game": 19.451764705882354,
+          "rank": 29
+        },
+        "TEN": {
+          "adjustment_ppg": 0.560014021105453,
+          "games": 17,
+          "normalized_factor": 0.8615600324699276,
+          "points_allowed_per_game": 19.049411764705884,
+          "rank": 28
+        },
+        "WAS": {
+          "adjustment_ppg": 0.65,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 19.55529411764706,
+          "rank": 30
+        }
+      },
+      "league_average": 16.302352941176473,
+      "prior_games": 16.0,
+      "soft_cap_ppg": 0.65,
+      "year_over_year_correlation": 0.24889358103422227
+    },
+    "RB": {
+      "defenses": {
+        "ARI": {
+          "adjustment_ppg": 0.8,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 26.223529411764705,
+          "rank": 30
+        },
+        "ATL": {
+          "adjustment_ppg": -0.09701386138613924,
+          "games": 17,
+          "normalized_factor": -0.12126732673267404,
+          "points_allowed_per_game": 21.511764705882353,
+          "rank": 17
+        },
+        "BAL": {
+          "adjustment_ppg": 0.25023366336633657,
+          "games": 17,
+          "normalized_factor": 0.3127920792079207,
+          "points_allowed_per_game": 23.123529411764707,
+          "rank": 22
+        },
+        "BUF": {
+          "adjustment_ppg": 0.4225900990099004,
+          "games": 17,
+          "normalized_factor": 0.5282376237623755,
+          "points_allowed_per_game": 23.923529411764704,
+          "rank": 24
+        },
+        "CAR": {
+          "adjustment_ppg": 0.4707485148514852,
+          "games": 17,
+          "normalized_factor": 0.5884356435643565,
+          "points_allowed_per_game": 24.147058823529413,
+          "rank": 25
+        },
+        "CHI": {
+          "adjustment_ppg": -0.1717861386138622,
+          "games": 17,
+          "normalized_factor": -0.21473267326732773,
+          "points_allowed_per_game": 21.16470588235294,
+          "rank": 14
+        },
+        "CIN": {
+          "adjustment_ppg": 0.8,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 28.298823529411763,
+          "rank": 32
+        },
+        "CLE": {
+          "adjustment_ppg": -0.023762376237624366,
+          "games": 17,
+          "normalized_factor": -0.029702970297030454,
+          "points_allowed_per_game": 21.851764705882353,
+          "rank": 18
+        },
+        "DAL": {
+          "adjustment_ppg": 0.6316990099009901,
+          "games": 17,
+          "normalized_factor": 0.7896237623762377,
+          "points_allowed_per_game": 24.894117647058824,
+          "rank": 27
+        },
+        "DEN": {
+          "adjustment_ppg": -0.8,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 16.947058823529414,
+          "rank": 1
+        },
+        "DET": {
+          "adjustment_ppg": -0.5583207920792088,
+          "games": 17,
+          "normalized_factor": -0.697900990099011,
+          "points_allowed_per_game": 19.370588235294118,
+          "rank": 7
+        },
+        "GB": {
+          "adjustment_ppg": -0.10715247524752534,
+          "games": 17,
+          "normalized_factor": -0.13394059405940667,
+          "points_allowed_per_game": 21.46470588235294,
+          "rank": 16
+        },
+        "HOU": {
+          "adjustment_ppg": -0.4290534653465359,
+          "games": 17,
+          "normalized_factor": -0.5363168316831698,
+          "points_allowed_per_game": 19.970588235294116,
+          "rank": 11
+        },
+        "IND": {
+          "adjustment_ppg": -0.4366574257425755,
+          "games": 17,
+          "normalized_factor": -0.5458217821782193,
+          "points_allowed_per_game": 19.935294117647057,
+          "rank": 10
+        },
+        "JAX": {
+          "adjustment_ppg": -0.7839049504950505,
+          "games": 17,
+          "normalized_factor": -0.9798811881188131,
+          "points_allowed_per_game": 18.323529411764707,
+          "rank": 2
+        },
+        "KC": {
+          "adjustment_ppg": -0.5950732673267338,
+          "games": 17,
+          "normalized_factor": -0.7438415841584173,
+          "points_allowed_per_game": 19.2,
+          "rank": 6
+        },
+        "LA": {
+          "adjustment_ppg": -0.38849900990099145,
+          "games": 17,
+          "normalized_factor": -0.4856237623762393,
+          "points_allowed_per_game": 20.158823529411762,
+          "rank": 12
+        },
+        "LAC": {
+          "adjustment_ppg": -0.7408158415841595,
+          "games": 17,
+          "normalized_factor": -0.9260198019801993,
+          "points_allowed_per_game": 18.523529411764706,
+          "rank": 4
+        },
+        "LV": {
+          "adjustment_ppg": 0.21221386138613862,
+          "games": 17,
+          "normalized_factor": 0.2652673267326733,
+          "points_allowed_per_game": 22.947058823529414,
+          "rank": 21
+        },
+        "MIA": {
+          "adjustment_ppg": 0.6240950495049504,
+          "games": 17,
+          "normalized_factor": 0.780118811881188,
+          "points_allowed_per_game": 24.858823529411765,
+          "rank": 26
+        },
+        "MIN": {
+          "adjustment_ppg": -0.5139643564356442,
+          "games": 17,
+          "normalized_factor": -0.6424554455445552,
+          "points_allowed_per_game": 19.576470588235296,
+          "rank": 9
+        },
+        "NE": {
+          "adjustment_ppg": -0.6901227722772283,
+          "games": 17,
+          "normalized_factor": -0.8626534653465353,
+          "points_allowed_per_game": 18.758823529411767,
+          "rank": 5
+        },
+        "NO": {
+          "adjustment_ppg": -0.2681029702970303,
+          "games": 17,
+          "normalized_factor": -0.3351287128712878,
+          "points_allowed_per_game": 20.71764705882353,
+          "rank": 13
+        },
+        "NYG": {
+          "adjustment_ppg": 0.8,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 25.7,
+          "rank": 29
+        },
+        "NYJ": {
+          "adjustment_ppg": 0.8,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 27.98235294117647,
+          "rank": 31
+        },
+        "PHI": {
+          "adjustment_ppg": 0.17039207920792057,
+          "games": 17,
+          "normalized_factor": 0.2129900990099007,
+          "points_allowed_per_game": 22.75294117647059,
+          "rank": 20
+        },
+        "PIT": {
+          "adjustment_ppg": -0.5380435643564366,
+          "games": 17,
+          "normalized_factor": -0.6725544554455457,
+          "points_allowed_per_game": 19.46470588235294,
+          "rank": 8
+        },
+        "SEA": {
+          "adjustment_ppg": -0.7496871287128728,
+          "games": 17,
+          "normalized_factor": -0.9371089108910909,
+          "points_allowed_per_game": 18.48235294117647,
+          "rank": 3
+        },
+        "SF": {
+          "adjustment_ppg": 0.3490851485148512,
+          "games": 17,
+          "normalized_factor": 0.4363564356435639,
+          "points_allowed_per_game": 23.58235294117647,
+          "rank": 23
+        },
+        "TB": {
+          "adjustment_ppg": 0.022114851485147552,
+          "games": 17,
+          "normalized_factor": 0.02764356435643444,
+          "points_allowed_per_game": 22.06470588235294,
+          "rank": 19
+        },
+        "TEN": {
+          "adjustment_ppg": -0.11855841584158511,
+          "games": 17,
+          "normalized_factor": -0.14819801980198138,
+          "points_allowed_per_game": 21.41176470588235,
+          "rank": 15
+        },
+        "WAS": {
+          "adjustment_ppg": 0.7520950495049505,
+          "games": 17,
+          "normalized_factor": 0.9401188118811881,
+          "points_allowed_per_game": 25.45294117647059,
+          "rank": 28
+        }
+      },
+      "league_average": 21.962058823529414,
+      "prior_games": 16.0,
+      "soft_cap_ppg": 0.8,
+      "year_over_year_correlation": 0.20173233726683168
+    },
+    "TE": {
+      "defenses": {
+        "ARI": {
+          "adjustment_ppg": 0.5,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 16.935294117647057,
+          "rank": 31
+        },
+        "ATL": {
+          "adjustment_ppg": -0.5,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 10.194117647058825,
+          "rank": 4
+        },
+        "BAL": {
+          "adjustment_ppg": -0.38665715970941555,
+          "games": 17,
+          "normalized_factor": -0.7733143194188311,
+          "points_allowed_per_game": 10.91764705882353,
+          "rank": 7
+        },
+        "BUF": {
+          "adjustment_ppg": -0.5,
+          "games": 16,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 8.043750000000001,
+          "rank": 1
+        },
+        "CAR": {
+          "adjustment_ppg": 0.06728760536670227,
+          "games": 17,
+          "normalized_factor": 0.13457521073340453,
+          "points_allowed_per_game": 13.711764705882352,
+          "rank": 19
+        },
+        "CHI": {
+          "adjustment_ppg": -0.03783644549303025,
+          "games": 17,
+          "normalized_factor": -0.0756728909860605,
+          "points_allowed_per_game": 13.064705882352941,
+          "rank": 15
+        },
+        "CIN": {
+          "adjustment_ppg": 0.5,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 20.86470588235294,
+          "rank": 32
+        },
+        "CLE": {
+          "adjustment_ppg": -0.19265550221372738,
+          "games": 17,
+          "normalized_factor": -0.38531100442745475,
+          "points_allowed_per_game": 12.111764705882353,
+          "rank": 11
+        },
+        "DAL": {
+          "adjustment_ppg": -0.15442857462836992,
+          "games": 17,
+          "normalized_factor": -0.30885714925673985,
+          "points_allowed_per_game": 12.347058823529412,
+          "rank": 13
+        },
+        "DEN": {
+          "adjustment_ppg": 0.05773087347036297,
+          "games": 17,
+          "normalized_factor": 0.11546174694072595,
+          "points_allowed_per_game": 13.652941176470588,
+          "rank": 17
+        },
+        "DET": {
+          "adjustment_ppg": 0.06059789303926505,
+          "games": 17,
+          "normalized_factor": 0.1211957860785301,
+          "points_allowed_per_game": 13.670588235294119,
+          "rank": 18
+        },
+        "GB": {
+          "adjustment_ppg": -0.19265550221372738,
+          "games": 17,
+          "normalized_factor": -0.38531100442745475,
+          "points_allowed_per_game": 12.111764705882353,
+          "rank": 10
+        },
+        "HOU": {
+          "adjustment_ppg": -0.16589665290397737,
+          "games": 17,
+          "normalized_factor": -0.33179330580795474,
+          "points_allowed_per_game": 12.276470588235293,
+          "rank": 12
+        },
+        "IND": {
+          "adjustment_ppg": 0.3148069614818908,
+          "games": 17,
+          "normalized_factor": 0.6296139229637816,
+          "points_allowed_per_game": 15.235294117647058,
+          "rank": 26
+        },
+        "JAX": {
+          "adjustment_ppg": 0.24026445269044408,
+          "games": 17,
+          "normalized_factor": 0.48052890538088816,
+          "points_allowed_per_game": 14.776470588235293,
+          "rank": 23
+        },
+        "KC": {
+          "adjustment_ppg": -0.3723220618649067,
+          "games": 17,
+          "normalized_factor": -0.7446441237298134,
+          "points_allowed_per_game": 11.005882352941176,
+          "rank": 8
+        },
+        "LA": {
+          "adjustment_ppg": -0.02732404040705674,
+          "games": 17,
+          "normalized_factor": -0.05464808081411348,
+          "points_allowed_per_game": 13.129411764705884,
+          "rank": 16
+        },
+        "LAC": {
+          "adjustment_ppg": -0.4621553416904964,
+          "games": 17,
+          "normalized_factor": -0.9243106833809928,
+          "points_allowed_per_game": 10.452941176470588,
+          "rank": 5
+        },
+        "LV": {
+          "adjustment_ppg": -0.5,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 10.058823529411764,
+          "rank": 3
+        },
+        "MIA": {
+          "adjustment_ppg": 0.4839611160470972,
+          "games": 17,
+          "normalized_factor": 0.9679222320941944,
+          "points_allowed_per_game": 16.276470588235295,
+          "rank": 29
+        },
+        "MIN": {
+          "adjustment_ppg": -0.4296624532429427,
+          "games": 17,
+          "normalized_factor": -0.8593249064858854,
+          "points_allowed_per_game": 10.652941176470588,
+          "rank": 6
+        },
+        "NE": {
+          "adjustment_ppg": 0.2162118142462941,
+          "games": 16,
+          "normalized_factor": 0.4324236284925882,
+          "points_allowed_per_game": 14.66875,
+          "rank": 21
+        },
+        "NO": {
+          "adjustment_ppg": -0.1334037644564235,
+          "games": 17,
+          "normalized_factor": -0.266807528912847,
+          "points_allowed_per_game": 12.476470588235294,
+          "rank": 14
+        },
+        "NYG": {
+          "adjustment_ppg": -0.31536393976272414,
+          "games": 17,
+          "normalized_factor": -0.6307278795254483,
+          "points_allowed_per_game": 11.356470588235295,
+          "rank": 9
+        },
+        "NYJ": {
+          "adjustment_ppg": 0.3140424229301841,
+          "games": 17,
+          "normalized_factor": 0.6280848458603682,
+          "points_allowed_per_game": 15.23058823529412,
+          "rank": 25
+        },
+        "PHI": {
+          "adjustment_ppg": -0.5,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 8.341176470588236,
+          "rank": 2
+        },
+        "PIT": {
+          "adjustment_ppg": 0.5,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 16.605882352941176,
+          "rank": 30
+        },
+        "SEA": {
+          "adjustment_ppg": 0.22401800846666728,
+          "games": 17,
+          "normalized_factor": 0.44803601693333456,
+          "points_allowed_per_game": 14.676470588235293,
+          "rank": 22
+        },
+        "SF": {
+          "adjustment_ppg": 0.2479098382075158,
+          "games": 17,
+          "normalized_factor": 0.4958196764150316,
+          "points_allowed_per_game": 14.823529411764707,
+          "rank": 24
+        },
+        "TB": {
+          "adjustment_ppg": 0.4075072608763822,
+          "games": 17,
+          "normalized_factor": 0.8150145217527645,
+          "points_allowed_per_game": 15.805882352941175,
+          "rank": 27
+        },
+        "TEN": {
+          "adjustment_ppg": 0.13991876777888118,
+          "games": 17,
+          "normalized_factor": 0.27983753555776236,
+          "points_allowed_per_game": 14.158823529411764,
+          "rank": 20
+        },
+        "WAS": {
+          "adjustment_ppg": 0.4208866855312573,
+          "games": 17,
+          "normalized_factor": 0.8417733710625146,
+          "points_allowed_per_game": 15.888235294117646,
+          "rank": 28
+        }
+      },
+      "league_average": 13.29759650735294,
+      "prior_games": 16.0,
+      "soft_cap_ppg": 0.5,
+      "year_over_year_correlation": 0.23124280789580764
+    },
+    "WR": {
+      "defenses": {
+        "ARI": {
+          "adjustment_ppg": -0.05339046130636226,
+          "games": 17,
+          "normalized_factor": -0.11864546956969392,
+          "points_allowed_per_game": 30.164705882352937,
+          "rank": 15
+        },
+        "ATL": {
+          "adjustment_ppg": 0.2489661923509648,
+          "games": 17,
+          "normalized_factor": 0.5532582052243662,
+          "points_allowed_per_game": 33.629411764705885,
+          "rank": 23
+        },
+        "BAL": {
+          "adjustment_ppg": 0.45,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 35.95882352941176,
+          "rank": 29
+        },
+        "BUF": {
+          "adjustment_ppg": -0.3762806737859177,
+          "games": 17,
+          "normalized_factor": -0.836179275079817,
+          "points_allowed_per_game": 26.46470588235294,
+          "rank": 5
+        },
+        "CAR": {
+          "adjustment_ppg": -0.36652723334535864,
+          "games": 17,
+          "normalized_factor": -0.8145049629896859,
+          "points_allowed_per_game": 26.576470588235296,
+          "rank": 6
+        },
+        "CHI": {
+          "adjustment_ppg": 0.45,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 36.205882352941174,
+          "rank": 31
+        },
+        "CIN": {
+          "adjustment_ppg": -0.45,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 25.28705882352941,
+          "rank": 2
+        },
+        "CLE": {
+          "adjustment_ppg": -0.3372669120236821,
+          "games": 17,
+          "normalized_factor": -0.7494820267192935,
+          "points_allowed_per_game": 26.91176470588235,
+          "rank": 8
+        },
+        "DAL": {
+          "adjustment_ppg": 0.45,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 39.311764705882354,
+          "rank": 32
+        },
+        "DEN": {
+          "adjustment_ppg": -0.3270001326125672,
+          "games": 17,
+          "normalized_factor": -0.7266669613612604,
+          "points_allowed_per_game": 27.029411764705884,
+          "rank": 9
+        },
+        "DET": {
+          "adjustment_ppg": 0.42976417778069304,
+          "games": 17,
+          "normalized_factor": 0.9550315061793179,
+          "points_allowed_per_game": 35.70117647058823,
+          "rank": 28
+        },
+        "GB": {
+          "adjustment_ppg": 0.04157724824644837,
+          "games": 17,
+          "normalized_factor": 0.09239388499210749,
+          "points_allowed_per_game": 31.252941176470586,
+          "rank": 18
+        },
+        "HOU": {
+          "adjustment_ppg": -0.4224811811359337,
+          "games": 17,
+          "normalized_factor": -0.9388470691909637,
+          "points_allowed_per_game": 25.935294117647057,
+          "rank": 3
+        },
+        "IND": {
+          "adjustment_ppg": 0.45,
+          "games": 17,
+          "normalized_factor": 1.0,
+          "points_allowed_per_game": 36.12941176470588,
+          "rank": 30
+        },
+        "JAX": {
+          "adjustment_ppg": 0.04055057030533722,
+          "games": 17,
+          "normalized_factor": 0.09011237845630493,
+          "points_allowed_per_game": 31.241176470588236,
+          "rank": 17
+        },
+        "KC": {
+          "adjustment_ppg": -0.2997931671731133,
+          "games": 17,
+          "normalized_factor": -0.666207038162474,
+          "points_allowed_per_game": 27.341176470588238,
+          "rank": 10
+        },
+        "LA": {
+          "adjustment_ppg": 0.0811043489792401,
+          "games": 17,
+          "normalized_factor": 0.18023188662053355,
+          "points_allowed_per_game": 31.705882352941178,
+          "rank": 20
+        },
+        "LAC": {
+          "adjustment_ppg": -0.2930170927617779,
+          "games": 17,
+          "normalized_factor": -0.6511490950261731,
+          "points_allowed_per_game": 27.418823529411764,
+          "rank": 11
+        },
+        "LV": {
+          "adjustment_ppg": 0.2381860739692943,
+          "games": 17,
+          "normalized_factor": 0.5293023865984318,
+          "points_allowed_per_game": 33.50588235294118,
+          "rank": 22
+        },
+        "MIA": {
+          "adjustment_ppg": -0.0790574098341485,
+          "games": 17,
+          "normalized_factor": -0.17568313296477442,
+          "points_allowed_per_game": 29.870588235294118,
+          "rank": 14
+        },
+        "MIN": {
+          "adjustment_ppg": -0.45,
+          "games": 17,
+          "normalized_factor": -1.0,
+          "points_allowed_per_game": 23.71764705882353,
+          "rank": 1
+        },
+        "NE": {
+          "adjustment_ppg": -0.13809139144805768,
+          "games": 17,
+          "normalized_factor": -0.3068697587734615,
+          "points_allowed_per_game": 29.194117647058825,
+          "rank": 13
+        },
+        "NO": {
+          "adjustment_ppg": -0.26180608335198924,
+          "games": 17,
+          "normalized_factor": -0.5817912963377538,
+          "points_allowed_per_game": 27.776470588235295,
+          "rank": 12
+        },
+        "NYG": {
+          "adjustment_ppg": 0.2623130055854135,
+          "games": 17,
+          "normalized_factor": 0.5829177901898077,
+          "points_allowed_per_game": 33.78235294117647,
+          "rank": 24
+        },
+        "NYJ": {
+          "adjustment_ppg": -0.03747695321913446,
+          "games": 17,
+          "normalized_factor": -0.08328211826474324,
+          "points_allowed_per_game": 30.34705882352941,
+          "rank": 16
+        },
+        "PHI": {
+          "adjustment_ppg": -0.3490737083464638,
+          "games": 17,
+          "normalized_factor": -0.7757193518810306,
+          "points_allowed_per_game": 26.776470588235295,
+          "rank": 7
+        },
+        "PIT": {
+          "adjustment_ppg": 0.3891077313126794,
+          "games": 17,
+          "normalized_factor": 0.8646838473615097,
+          "points_allowed_per_game": 35.23529411764706,
+          "rank": 26
+        },
+        "SEA": {
+          "adjustment_ppg": -0.3937341987848125,
+          "games": 17,
+          "normalized_factor": -0.8749648861884721,
+          "points_allowed_per_game": 26.264705882352942,
+          "rank": 4
+        },
+        "SF": {
+          "adjustment_ppg": 0.12063144971203182,
+          "games": 17,
+          "normalized_factor": 0.2680698882489596,
+          "points_allowed_per_game": 32.15882352941177,
+          "rank": 21
+        },
+        "TB": {
+          "adjustment_ppg": 0.06005745118645498,
+          "games": 17,
+          "normalized_factor": 0.13346100263656663,
+          "points_allowed_per_game": 31.46470588235294,
+          "rank": 19
+        },
+        "TEN": {
+          "adjustment_ppg": 0.4193947305754674,
+          "games": 17,
+          "normalized_factor": 0.9319882901677052,
+          "points_allowed_per_game": 35.58235294117647,
+          "rank": 27
+        },
+        "WAS": {
+          "adjustment_ppg": 0.36036074896155856,
+          "games": 17,
+          "normalized_factor": 0.800801664359019,
+          "points_allowed_per_game": 34.90588235294118,
+          "rank": 25
+        }
+      },
+      "league_average": 30.776507352941174,
+      "prior_games": 16.0,
+      "soft_cap_ppg": 0.45,
+      "year_over_year_correlation": -0.08428755067908769
+    }
+  },
+  "rank_convention": "1=hardest,32=easiest",
+  "scoring": "neutral_ppr",
+  "season": 2025
+}

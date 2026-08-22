@@ -376,8 +376,23 @@ console.log(`Vegas games: matched=${vegasTeamsMatched} teams missing=${Math.max(
 console.log(`Player props: players with props=${propsByPlayer.size} players without props=${Math.max(0, projections.length - propsByPlayer.size)} query failures=${propsResult.queryFailures}`);
 console.log(`Sleeper consensus: matched=${sleeperById.size} optional query failures=${sleeperQueryFailures}`);
 const consensusWeights = reconciled.map((row) => Number(row.report.diagnostics.sleeperWeight ?? 0));
-const strongRescues = reconciled.filter((row) => Number(row.report.diagnostics.consensusRescueScore ?? 0) >= 0.5).length;
+const strongRescues = reconciled.filter((row) => Number(row.report.diagnostics.sleeperWeight ?? 0) >= 0.25).length;
+const consensusMagnitude = (row: typeof reconciled[number]) =>
+  Math.abs(Number(row.report.diagnostics.componentConsensusPpr ?? row.report.opportunity_adjusted_ppr) - Number(row.report.diagnostics.roleAdjustedPpr ?? row.report.raw_model_ppr))
+  + Math.abs(row.report.final_ppr - Number(row.report.diagnostics.preSleeperPpr ?? row.report.final_ppr));
+const consensusThresholds = Object.fromEntries([0.25, 0.5, 1, 2].map((threshold) => [
+  threshold,
+  reconciled.filter((row) => consensusMagnitude(row) > threshold).length,
+]));
+const rangeOvershoots = reconciled.filter((row) => {
+  const sleeperPpr = row.report.diagnostics.sleeperPpr;
+  const preSleeperPpr = row.report.diagnostics.preSleeperPpr;
+  if (sleeperPpr == null || preSleeperPpr == null) return false;
+  return row.report.final_ppr > Math.max(sleeperPpr, preSleeperPpr) + 0.011
+    || row.report.final_ppr < Math.min(sleeperPpr, preSleeperPpr) - 0.011;
+}).length;
 console.log(`v4.1 consensus rescue: strong=${strongRescues} average Sleeper weight=${(consensusWeights.reduce((sum, value) => sum + value, 0) / Math.max(1, consensusWeights.length)).toFixed(4)} maximum Sleeper weight=${Math.max(0, ...consensusWeights).toFixed(4)}`);
+console.log(`Consensus material adjustments: >0.25=${consensusThresholds[0.25]} >0.5=${consensusThresholds[0.5]} >1=${consensusThresholds[1]} >2=${consensusThresholds[2]} range overshoots=${rangeOvershoots}`);
 console.log(`Component/PPR mismatches: ${componentPprMismatches}`);
 console.log("Player props data is optional when the query succeeds; a failed props query blocks apply because absence cannot be verified.");
 console.log(`Required enrichment failures: ${requiredFailures}`);
@@ -426,6 +441,8 @@ writeFileSync("data/processed/projection_reconciliation_report.json", JSON.strin
       strong_rescues: strongRescues,
       average_sleeper_weight: consensusWeights.reduce((sum, value) => sum + value, 0) / Math.max(1, consensusWeights.length),
       maximum_sleeper_weight: Math.max(0, ...consensusWeights),
+      material_adjustments: consensusThresholds,
+      range_overshoots: rangeOvershoots,
     },
   },
   rows: reconciled.map((row) => row.report),

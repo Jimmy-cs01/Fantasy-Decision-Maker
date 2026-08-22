@@ -101,8 +101,9 @@ export function v41SleeperComponentWeight(input: {
   const sleeper = Math.max(0, finite(input.sleeper));
   const disagreement = Math.abs(current - sleeper);
   const relative = disagreement / Math.max(1, current, sleeper);
-  const severity = clamp((relative - 0.08) / 0.62);
-  let weight = 0.16 + 0.44 * Math.pow(severity, 1.25);
+  const severity = clamp((relative - 0.06) / 0.5);
+  if (severity <= 0) return 0;
+  let weight = 0.03 * severity + 0.47 * Math.pow(severity, 1.35);
   const historical = input.historical;
   if (
     historical != null
@@ -111,9 +112,9 @@ export function v41SleeperComponentWeight(input: {
     && Math.sign(sleeper - current) === Math.sign(historical - current)
     && Math.abs(historical - current) > Math.max(0.2, disagreement * 0.2)
   ) {
-    weight += 0.08;
+    weight += 0.06 * severity;
   }
-  return clamp(weight, 0.16, 0.68);
+  return clamp(weight, 0, 0.56);
 }
 
 const MARKET_COMPONENT: Record<string, keyof ProjectedStatLine> = {
@@ -146,6 +147,8 @@ const SLEEPER_COMPONENT: Array<[keyof V4SleeperComponents, keyof ProjectedStatLi
 export function applyV4ComponentConsensus(input: {
   stats: ProjectedStatLine;
   position: string;
+  modelPpr?: number | null;
+  sleeperPpr?: number | null;
   historical?: V4HistoricalBaseline | null;
   sleeper?: V4SleeperComponents | null;
   props?: V4ComponentEvidence[];
@@ -157,6 +160,12 @@ export function applyV4ComponentConsensus(input: {
   const reasons: string[] = [];
   const now = input.now ?? new Date();
   const v41 = input.release === "v4.1";
+  const totalPprDisagreement = input.modelPpr == null || input.sleeperPpr == null
+    ? null
+    : Math.abs(finite(input.sleeperPpr) - finite(input.modelPpr));
+  const totalPprSeverity = totalPprDisagreement == null
+    ? 1
+    : clamp((totalPprDisagreement - 0.75) / 5.25);
   let historicalProtectionApplied = false;
   let componentSleeperWeight = 0;
   let sleeperComponentsUsed = 0;
@@ -194,7 +203,7 @@ export function applyV4ComponentConsensus(input: {
     for (const [source, target] of SLEEPER_COMPONENT) {
       const value = input.sleeper[source];
       if (value == null || !Number.isFinite(value)) continue;
-      const weight = v41
+      const componentWeight = v41
         ? v41SleeperComponentWeight({
           current: finite(stats[target]),
           sleeper: value,
@@ -202,6 +211,7 @@ export function applyV4ComponentConsensus(input: {
           historicalGames: history?.games,
         })
         : 0.18;
+      const weight = v41 ? componentWeight * Math.pow(totalPprSeverity, 0.8) : componentWeight;
       stats[target] = blend(stats[target], value, weight);
       totalSleeperWeight += weight;
       sleeperComponentsUsed += 1;

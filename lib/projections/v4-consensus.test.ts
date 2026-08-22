@@ -66,7 +66,18 @@ describe("v4 component consensus", () => {
     const close = v41SleeperComponentWeight({ current: 30, sleeper: 32, historicalGames: 30 });
     const extreme = v41SleeperComponentWeight({ current: 20, sleeper: 50, historical: 48, historicalGames: 50 });
     expect(extreme).toBeGreaterThan(close);
-    expect(extreme).toBeLessThanOrEqual(0.68);
+    expect(extreme).toBeLessThanOrEqual(0.56);
+  });
+
+  it("leaves closely aligned components unchanged", () => {
+    expect(v41SleeperComponentWeight({ current: 16.5, sleeper: 16.9, historicalGames: 60 })).toBe(0);
+    const result = applyV4ComponentConsensus({
+      release: "v4.1", position: "RB", modelPpr: 16.5, sleeperPpr: 16.9,
+      stats: { rush_attempts: 18, rushing_yards: 70, targets: 4, receptions: 3 },
+      sleeper: { rushAttempts: 12, rushingYards: 50, targets: 7, receptions: 5 },
+    });
+    expect(result.stats.rush_attempts).toBe(18);
+    expect(result.stats.targets).toBe(4);
   });
 
   it("keeps missing Sleeper components neutral", () => {

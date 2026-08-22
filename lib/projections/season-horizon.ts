@@ -2,6 +2,7 @@ import { calculateWeeklyAvailability } from "@/lib/injuries/availability";
 import type { InjuryRecord } from "@/lib/injuries/types";
 import { normalizeNflTeam } from "@/lib/nfl/teams";
 import { normalizeProjection } from "./normalize";
+import { applyRelativeOpponentAdjustment } from "./opponent-adjustment";
 import type { ProjectionConfidence, ProjectionRecord, ProjectionScoringContext } from "./types";
 
 export const FANTASY_REGULAR_SEASON_WEEKS = 17;
@@ -80,6 +81,7 @@ export function buildSeasonProjectionHorizon(input: {
   const anchor = records.get(currentWeek)
     ?? [...input.records].sort((left, right) => Math.abs(left.week - currentWeek) - Math.abs(right.week - currentWeek))[0];
   const team = normalizeNflTeam(anchor.team ?? "");
+  const anchorOpponent = normalizeNflTeam(anchor.opponent_team ?? "");
   const rows = Array.from({ length: FANTASY_REGULAR_SEASON_WEEKS }, (_, index) => index + 1).map((week) => {
     const game = input.games.find((candidate) => Number(candidate.week) === week
       && [candidate.home_team, candidate.away_team].map((item) => normalizeNflTeam(item)).includes(team));
@@ -87,9 +89,17 @@ export function buildSeasonProjectionHorizon(input: {
     const isTeamless = !team;
     const isBye = !isTeamless && !game;
     const opponent = game ? normalizeNflTeam(normalizeNflTeam(game.home_team) === team ? game.away_team : game.home_team) ?? null : null;
-    const record = isBye || isTeamless
+    const baseRecord = isBye || isTeamless
       ? zeroRecord(stored ?? anchor, week, isBye ? "NFL bye week" : "No current NFL team")
       : stored ?? forecastRecord(anchor, week, opponent ?? "", Math.max(0, week - currentWeek));
+    const record = isBye || isTeamless
+      ? baseRecord
+      : applyRelativeOpponentAdjustment({
+        record: baseRecord,
+        position: input.context.position,
+        opponent,
+        anchorOpponent,
+      });
     const kickoff = game?.kickoff ?? null;
     const availability = isBye ? null : calculateWeeklyAvailability(
       input.injury,

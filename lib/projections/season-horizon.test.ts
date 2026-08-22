@@ -33,7 +33,8 @@ describe("17-week projection horizon", () => {
       context: { mode: "ppr", position: "WR" }, now: new Date("2026-08-21T12:00:00Z"),
     });
     expect(result.rows.slice(0, 4).map((row) => row.projection.projectedPoints)).toEqual([0, 0, 0, 0]);
-    expect(result.rows[5].projection.projectedPoints).toBe(17);
+    expect(result.rows[5].projection.projectedPoints).toBe(result.rows[5].projection.activeGameProjectedPoints);
+    expect(result.rows[5].projection.projectedPoints).not.toBe(17);
     expect(result.rows[0].projection.activeGameProjectedPoints).toBe(17);
   });
 });

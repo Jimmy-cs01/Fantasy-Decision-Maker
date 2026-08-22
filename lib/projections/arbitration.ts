@@ -56,6 +56,9 @@ export interface ProjectionArbitrationInput {
 
 export interface ProjectionDiagnostics {
   rawModelPpr: number;
+  roleAdjustedPpr?: number;
+  componentConsensusPpr?: number;
+  preSleeperPpr?: number;
   opportunityAdjustedPpr: number;
   vegasPpr: number | null;
   sleeperPpr: number | null;
@@ -124,8 +127,8 @@ export function calculateV41ConsensusRescue(input: {
   const severity = clamp((disagreement - 0.75) / 5.25);
   const componentsUsed = (input.sleeperComponentsUsed ?? 0) > 0;
   const minimum = componentsUsed ? 0.04 : 0.08;
-  const maximum = 0.72;
-  let weight = minimum + (maximum - minimum) * Math.pow(severity, 1.1);
+  const maximum = componentsUsed ? 0.58 : 0.68;
+  let weight = severity <= 0 ? 0 : minimum * severity + (maximum - minimum) * Math.pow(severity, 1.35);
   let score = severity;
   let corroboratingSignals = 0;
 
@@ -137,7 +140,7 @@ export function calculateV41ConsensusRescue(input: {
     && Math.abs(vegas - jimmy) >= 1.5
   ) {
     const quality = clamp(input.vegasConfidence ?? 0);
-    weight += 0.15 * quality;
+    weight += 0.12 * quality * severity;
     score += 0.2 * quality;
     corroboratingSignals += 1;
   }
@@ -149,15 +152,15 @@ export function calculateV41ConsensusRescue(input: {
     && Math.sign(history - jimmy) === direction
     && Math.abs(history - jimmy) >= 1.5
   ) {
-    weight += input.roleConfidence >= 0.8 ? 0.18 : 0.08;
+    weight += (input.roleConfidence >= 0.8 ? 0.14 : 0.06) * severity;
     score += 0.16;
     corroboratingSignals += 1;
   }
-  if (corroboratingSignals >= 2) weight += 0.12;
-  if (input.modelConfidence === "high" && corroboratingSignals === 0) weight -= 0.06;
-  if (input.roleConfidence < 0.5 && corroboratingSignals === 0) weight -= 0.08;
+  if (corroboratingSignals >= 2) weight += 0.08 * severity;
+  if (input.modelConfidence === "high" && corroboratingSignals === 0) weight -= 0.05 * severity;
+  if (input.roleConfidence < 0.5 && corroboratingSignals === 0) weight -= 0.06 * severity;
   return {
-    weight: clamp(weight, 0.03, maximum),
+    weight: clamp(weight, 0, maximum),
     score: clamp(score),
     corroboratingSignals,
   };
@@ -375,10 +378,13 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
   const settings = input.scoringSettings ?? { rec: 1 };
   const role = opportunityConfidence(input);
   let opportunityStats = opportunityAdjustedStats(input.rawStats, role);
+  const roleAdjustedPpr = calculateProjectedFantasyPoints(opportunityStats, settings, input.position);
   const v4 = input.arbitrationVersion?.startsWith("v4")
     ? applyV4ComponentConsensus({
       stats: opportunityStats,
       position: input.position,
+      modelPpr: input.modelPpr,
+      sleeperPpr: input.sleeperPpr,
       historical: input.historicalBaseline,
       sleeper: input.sleeperStats,
       props: input.vegasProps,
@@ -403,6 +409,7 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
     : vegas.weight;
   const modelWeight = 1 - vegasWeight;
   let final = opportunityPpr * modelWeight + (vegas.ppr ?? 0) * vegasWeight;
+  const preSleeperPpr = final;
   let sleeperWeight = 0;
   let consensusRescueScore = 0;
   let consensusSignals = 0;
@@ -463,6 +470,9 @@ export function arbitrateProjection(input: ProjectionArbitrationInput): Projecti
   if (!drivers.length) drivers.push("Model, role, and available external evidence are broadly consistent");
   const diagnostics: ProjectionDiagnostics = {
     rawModelPpr: input.modelPpr,
+    roleAdjustedPpr,
+    componentConsensusPpr: opportunityPpr,
+    preSleeperPpr,
     opportunityAdjustedPpr: opportunityPpr,
     vegasPpr: vegas.ppr,
     sleeperPpr: sleeper,
